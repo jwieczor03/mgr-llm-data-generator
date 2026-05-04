@@ -1,0 +1,42 @@
+# =========================
+# 1. Środowisko Python
+# =========================
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# =========================
+# 2. Zmienne Środowiskowe (Sekrety)
+# =========================
+# TUTAJ NIGDY NIE WYSYŁAMY KLUCZY API ANI HASEŁ AWS!
+.env
+
+# =========================
+# 3. Pliki IDE i Systemowe
+# =========================
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# =========================
+# 4. Dane Projektowe i Bazy Danych
+# =========================
+# Ignorujemy surowe dane z Capgemini oraz wygenerowane paczki
+data/raw/
+data/generated/
+data/schemas/*.sql
+data/schemas/*.json
+
+# Ignorujemy pliki lokalnej bazy wektorowej (LanceDB / Chroma)
+*.lancedb/
+vectordb/
+
+# Ignorujemy logi działania serwera
+logs/
+*.log
