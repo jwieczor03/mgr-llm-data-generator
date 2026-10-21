@@ -82,6 +82,7 @@ flowchart TD
 
 ### Zasady interpretacji
 
+- Walidacja ma potwierdzoną kolejność: składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do pustego, odizolowanego PostgreSQL oraz kompletność → dodatkowe reguły biznesowe. Wstępna kontrola nie zastępuje importu; niewykonalne dalsze sprawdzenia mają jawną przyczynę.
 - Pierwsze wygenerowanie nie zużywa jednej z domyślnych 3 rund poprawek.
 - Limit dotyczy całego zlecenia, nie każdej tabeli osobno.
 - Liczba wywołań modeli może być inna niż liczba rund, szczególnie w wariancie wieloagentowym.

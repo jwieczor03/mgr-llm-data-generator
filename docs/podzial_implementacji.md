@@ -1,6 +1,6 @@
 # Podział implementacji — własny rdzeń i gotowe komponenty
 
-**Data:** 20 października 2026.
+**Data:** 21 października 2026.
 
 **Status:** propozycja architektoniczna do uzgodnienia, nie zatwierdzony wybór technologii.
 
@@ -48,7 +48,7 @@ Nie proponujemy zastąpienia tego rdzenia gotową platformą agentową. Platform
 | Komunikacja z modelami | Klient dostawcy albo istniejąca warstwa integracyjna. | Kontrakt operacji modelu, mapowanie możliwości i błędów, identyfikacja ról, zapis faktycznych wiadomości oraz dostępnych metryk bez poświadczeń. |
 | Modele lokalne | Istniejący silnik uruchamiania i udostępniania modeli. | Konfiguracja połączenia i adapter; nie implementujemy inferencji ani obsługi GPU. |
 | Proces generowania | Opcjonalnie biblioteka do organizowania kroków lub agentów. | Prompty, podział odpowiedzialności, przekazywany kontekst i reakcja na naruszenia. Globalny limit poprawek i ostateczna ocena pozostają poza tym procesem. |
-| Importowalność | Proponowany kierunek: silnik PostgreSQL i próbny import w odizolowanym środowisku. To propozycja dla OD-02, nie zatwierdzony mechanizm. | Przygotowanie środowiska, dozwolony zakres wejścia, uruchomienie importu, zebranie dowodów i diagnostyki oraz sprzątanie. |
+| Importowalność | Uzgodniony rzeczywisty próbny import do pustego, odizolowanego PostgreSQL, po wstępnej kontroli składni, schematu i typów. Szczegóły OD-02 nadal otwarte. | Przygotowanie środowiska, dozwolony zakres wejścia, uruchomienie importu, zebranie dowodów i diagnostyki oraz sprzątanie. |
 | Kompletność | Gotowe odczyty danych, liczenie rekordów i operacje na zbiorach. | Porównanie z zatwierdzonym planem dla całej paczki, także wykrywanie brakujących tabel i nieuzgodnionego zakresu. |
 | Reguły biznesowe | Gotowe operacje porównywania, agregacji lub wykonywania zapytań; ewentualnie biblioteka walidacyjna. | Zatwierdzona definicja sprawdzenia, jego przygotowanie w obsługiwanym zakresie, jednostka naruszenia i raport. Nie obiecujemy automatycznej obsługi dowolnego tekstowego wymagania. |
 | Eksport | Biblioteki odczytu CSV do sprawdzeń, zapisu zawartości i archiwizacji. | Profil eksportu, wyodrębnienie gotowego SQL/CSV modelu, przypisanie plików do tabel, kolejność importu i powiązanie wyniku z kandydatem oraz raportem. Bez cichego poprawiania danych. |
@@ -64,11 +64,11 @@ Gotowa biblioteka nie zwalnia nas z konfiguracji i testów. Nie zakładamy równ
 
 ### 4.1. Zgodność ze schematem i importowalność
 
-Rekomendujemy rozpatrzenie próbnego importu zamiast samodzielnego odtwarzania semantyki typów i ograniczeń PostgreSQL. Gotowy silnik egzekwuje zadeklarowane ograniczenia, natomiast nasz adapter odpowiada za warunki próby i poprawność wniosku [S1].
+21 października 2026 wybrano rzeczywisty próbny import zamiast samej analizy statycznej. Wstępna kontrola schematu i typów poprzedza import, ale nie odtwarza pełnej semantyki PostgreSQL. Gotowy silnik egzekwuje zadeklarowane ograniczenia, natomiast nasz adapter odpowiada za warunki próby i poprawność wniosku [S1].
 
 Udany import nie dowodzi kompletności planu, spełnienia wszystkich dodatkowych reguł ani realizmu. Obsługa przez silnik nie rozszerza automatycznie zakresu generatora: nadal potrzebujemy macierzy OD-01.
 
-Jeżeli wybierzemy tę metodę, proponujemy następujące warunki:
+Dla wybranej metody proponujemy następujące szczegóły realizacji:
 
 - osobne środowisko walidacyjne, bez dostępu do bazy z historią aplikacji i baz użytkownika;
 - ograniczone uprawnienia, czas i zasoby oraz jawna lista dozwolonych konstrukcji DDL, instrukcji i wyrażeń; nie uruchamiamy dowolnego SQL od użytkownika lub modelu;
@@ -154,7 +154,7 @@ Granice osobnych procesów i wdrożeń ustalimy osobno. Naturalnymi kandydatami 
 
 ## 9. Nierozstrzygnięte decyzje
 
-Ten podział nie zamyka punktów OD-01–OD-12 ze specyfikacji. Szczególnie pozostają otwarte: sposób potwierdzania importowalności, wybór kandydata, wykonywanie reguł, profil eksportu, wartości timeoutów i raportowanie nieudanych operacji, dostępność danych po anulowaniu, retencja oraz szczegóły organizacji wariantów. Brak automatycznego retry po błędzie technicznym jest już uzgodniony.
+Ten podział nie zamyka pozostałych szczegółów OD-01–OD-12 ze specyfikacji. Metodę próbnego importu już uzgodniono; otwarte pozostają szczegóły środowiska, wybór kandydata, wykonywanie reguł, profil eksportu, wartości timeoutów i raportowanie nieudanych operacji, dostępność danych po anulowaniu, retencja oraz szczegóły organizacji wariantów. Brak automatycznego retry po błędzie technicznym jest już uzgodniony. [Projekt walidacji](lld/walidacja.md) zawiera także niezatwierdzoną macierz PostgreSQL i pytanie o agregacje.
 
 Uzgodniono, że model zwraca gotowy SQL/CSV. Nie budujemy przebiegu opartego na deterministycznym generowaniu tego formatu z pośrednich rekordów modelu. W ramach OD-10 pozostaje organizacja wariantów i dokładny kontrakt przekazania plików. Pozytywny raport i eksport muszą dotyczyć tych samych danych w rzeczywiście dostarczanym formacie.
 

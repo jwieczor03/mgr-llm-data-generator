@@ -1,6 +1,6 @@
 # Architektura ogólna i przepływ danych
 
-**Data:** 20 października 2026.
+**Data:** 21 października 2026.
 
 **Aktualizacja:** 21 października 2026.
 
@@ -19,7 +19,7 @@ Proponujemy cztery logiczne odpowiedzialności: projekty i zlecenia, wykonania, 
 | Interfejs webowy | Wprowadzanie danych, zatwierdzanie, start i anulowanie, odczyt statusu i pobieranie wyniku. | Nie jest źródłem prawdy o zadaniu ani właścicielem trwałej historii. |
 | Backend zarządzający | Moduł projektów i zleceń oraz moduł wykonań. Kontrola dostępu, migawki wymagań, limit poprawek, historia i raport. | Projekty, zatwierdzone zlecenia, wykonania, historia, wskazania kandydatów i raporty. Zapis przez własne adaptery. |
 | Usługa generowania | Realizacja wybranego wariantu modelowego, przygotowanie gotowego SQL albo treści CSV, reakcja na zleconą poprawkę. | Dane robocze konkretnej operacji; nie potrzebuje osobnej bazy historii. Zwraca artefakty i ślad wywołań do utrwalenia. |
-| Usługa walidacji | Sekwencja sprawdzeń gotowego kandydata. W razie wyboru próbnego importu korzysta z odizolowanego środowiska. | Dane tymczasowe konkretnego sprawdzenia; trwały raport jest przypisany do wykonania przez backend. |
+| Usługa walidacji | Sekwencja sprawdzeń gotowego kandydata, z rzeczywistym próbnym importem do odizolowanego PostgreSQL. | Dane tymczasowe konkretnego sprawdzenia; trwały raport jest przypisany do wykonania przez backend. |
 
 Gotowy serwer modelu lokalnego lub API dostawcy jest zależnością usługi generowania, a nie dodatkowym serwisem biznesowym, który musimy napisać.
 
@@ -63,23 +63,26 @@ flowchart TD
     D --> E["Model przygotowuje gotowy wynik"]
     E --> F["Zapis odpowiedzi, artefaktów i identyfikacji kandydata"]
     F --> G["Etap 1: składnia i format"]
-    G --> H["Etap 2: typy, obsługiwane ograniczenia, relacje i kompletność"]
-    H --> I["Etap 3: zatwierdzone reguły biznesowe"]
+    G --> H["Etap 2: wstępna zgodność ze schematem i typami"]
+    H --> P["Etap 3: próbny import, ograniczenia, relacje i kompletność"]
+    P --> I["Etap 4: zatwierdzone reguły biznesowe"]
     I --> J["Zapis wyników sprawdzeń konkretnego kandydata"]
     G -->|"Dalsze sprawdzenia niemożliwe"| J
     H -->|"Dalsze sprawdzenia niemożliwe"| J
+    P -->|"Dalsze sprawdzenia niemożliwe"| J
     J --> K["Decyzja o poprawce lub zakończeniu"]
     K -->|"Naruszenia danych i pozostały limit poprawek"| E
     K -->|"Zakończenie"| L["Wskazanie zachowanego kandydata i jego raportu"]
     E -->|"Błąd techniczny"| X["Przerwane błędem: bez retry i bez wznawiania"]
     G -->|"Błąd techniczny walidatora"| X
     H -->|"Błąd techniczny walidatora"| X
+    P -->|"Błąd techniczny walidatora"| X
     I -->|"Błąd techniczny walidatora"| X
 ```
 
-Etap drugi zachowuje wcześniejsze wymagania kompletności i importowalności. Same prawidłowe typy nie potwierdzają istnienia rekordów wskazywanych przez klucze obce ani wymaganej liczby rekordów.
+Etap drugi jest kontrolą wstępną, nie własnym pełnym systemem typów. Rzeczywisty import w etapie trzecim potwierdza zgodność z typami i obsługiwanymi ograniczeniami PostgreSQL. Osobno sprawdzamy kompletność: same prawidłowe typy i udany import nie dowodzą wymaganej liczby rekordów.
 
-Jeżeli wcześniejszy etap uniemożliwia dalsze sprawdzenie, niewykonane testy są jawnie oznaczane. Nie otrzymują wyniku pozytywnego. Zakres typów i ograniczeń (OD-01), mechanizm potwierdzenia importowalności (OD-02) oraz wykonywalna postać dodatkowych reguł pozostają do doprecyzowania.
+Jeżeli wcześniejszy etap uniemożliwia dalsze sprawdzenie, niewykonane testy są jawnie oznaczane. Nie otrzymują wyniku pozytywnego. Metodę próbnego importu potwierdzono 21 października 2026; zakres typów i ograniczeń (OD-01), szczegóły środowiska (pozostała część OD-02) oraz wykonywalna postać dodatkowych reguł pozostają do doprecyzowania. [Projekt walidacji](lld/walidacja.md) zapisuje te statusy osobno.
 
 Pętla poprawek jest potwierdzona: naruszenia danych uruchamiają poprawki zgodnie z REQ-032–REQ-037, domyślnie maksymalnie 3 rundy po pierwszym wygenerowaniu dla całego wykonania. Błąd techniczny na dowolnym etapie kończy wykonanie zgodnie z REQ-070. Nie jest wynikiem negatywnej walidacji danych ani powodem rozpoczęcia kolejnej rundy.
 
@@ -118,3 +121,5 @@ Nie potrzebujemy przed tym etapu pełnego projektu kont, wielu workerów ani inf
 [Rejestr ustaleń](ustalenia_architektoniczne.md) rozróżnia wymagania, zapisane kierunki i nierozstrzygnięte propozycje. Utrwalono PostgreSQL jako źródło danych, opcjonalny pgvector, dobór kontekstu za portem oraz LiteLLM SDK jako preferowany adapter po próbach zgodności i przeglądzie wersji.
 
 [Serwisy i technologie](serwisy_i_technologie.md) rozwijają ten diagram do funkcji interfejsu oraz trzech proponowanych serwisów: `application-api`, `generation-service` i `validation-service`. Dokument obejmuje narzędzia, kontrakty, model danych, ślad wywołań, transfer artefaktów, runner i obsługę awarii. Bazuje na wariancie Python/FastAPI + React/TypeScript; nie zamyka OD-01–OD-12.
+
+[LLD v0.1](lld/README.md) uszczegóławia implementację: kierunki zależności modułów, model tabel, transakcje, koperty API, maszynę stanów oraz ochronę przed przyjęciem skutków starej operacji. To projekt do oceny przed kodowaniem.

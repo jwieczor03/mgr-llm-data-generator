@@ -15,14 +15,14 @@
 
 Polecenie zapisania ustaleń nie oznacza przyjęcia nieomówionej reprezentacji reguł, całego dialektu PostgreSQL, konkretnych wersji zależności ani dowolnego sposobu wykonywania SQL.
 
-## 2. Wymagania zachowane bez zmian
+## 2. Uzgodnione wymagania i doprecyzowania
 
 | Obszar | Ustalenie |
 | --- | --- |
 | Uruchomienie | Lokalna aplikacja webowa, jeden użytkownik, bez logowania w MVP. |
 | Rozwój | Granice umożliwiające przyszłe hostowanie, tożsamość użytkowników, izolację danych i współbieżne wykonania; nie wdrażamy ich na zapas. |
 | Wejście i wynik | DDL PostgreSQL, reguły i polecenie; model przygotowuje gotowy SQL `INSERT` albo treść CSV. |
-| Walidacja | Najpierw składnia i format, potem typy, schemat, relacje i kompletność, na końcu dodatkowe reguły biznesowe. |
+| Walidacja | Składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do pustego, odizolowanego PostgreSQL oraz kompletność → dodatkowe reguły biznesowe. |
 | Poprawki | Naruszenia danych uruchamiają ograniczone poprawki, domyślnie maksymalnie 3 globalne rundy po pierwszym wygenerowaniu. |
 | Błędy techniczne | Zatrzymanie bez automatycznego retry i bez przełączenia modelu lub wariantu. |
 | Przerwanie | Można anulować; nie ma wznawiania po anulowaniu, błędzie ani utracie procesu. Ręczne ponowienie tworzy nowe wykonanie. |
@@ -42,6 +42,7 @@ Polecenie zapisania ustaleń nie oznacza przyjęcia nieomówionej reprezentacji 
 | DA-06 | Własny port `LlmClient` oraz `LiteLlmAdapter` wykorzystujący LiteLLM Python SDK. | Preferowany kierunek dla backendu Python. Przyjęcie zależności wymaga testów wiadomości, metryk i braku ponowień oraz przeglądu konkretnej wersji. |
 | DA-07 | LiteLLM jako biblioteka w usłudze generowania, bez osobnego Proxy/Gateway. | Zapisany kierunek dla MVP. Bezpośredni adapter SDK dostawcy pozostaje rozwiązaniem zastępczym pod tym samym portem. |
 | DA-08 | Nie piszemy własnych mechanizmów technicznych, jeśli pasujące rozwiązanie jest dostępne. | Zapisany kierunek: gotowe API HTTP, parser, baza, migracje, inferencja, UI i narzędzia testowe; własna semantyka produktu i integracja. |
+| DA-09 | Rzeczywisty próbny import potwierdza importowalność po wstępnej kontroli składni, schematu i typów, przed dodatkowymi regułami biznesowymi. | Uzgodnione 21 października 2026; REQ-030 w specyfikacji v1.4. Szczegóły organizacji środowiska OD-02 pozostają otwarte. |
 
 LiteLLM pozostaje zależnością warunkową. W [analizie technologii](analiza_technologii.md), sekcja 8.1, zapisano incydent łańcucha dostaw dotyczący wydań PyPI `1.82.7` i `1.82.8`, wymagania przeglądu wersji i testów. Nie przyjmujemy automatycznie żadnego wydania jako bezpiecznego.
 
@@ -56,7 +57,7 @@ To wybrana podstawa tego projektu szczegółowego, a nie twierdzenie, że porów
 | Interfejs | TypeScript, React, Vite, Mantine; TanStack Query do danych serwera. | Propozycja szczegółowa. |
 | Backend zarządzający | Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Psycopg. | Propozycja szczegółowa. |
 | Generowanie | Python, FastAPI, LiteLLM za własnym adapterem. | Propozycja szczegółowa z kierunkiem DA-06. |
-| Walidacja | Python, FastAPI, parser SQL, `csv`; Psycopg i osobny PostgreSQL przy wyborze próbnego importu. | Propozycja szczegółowa, zależna od OD-01 i OD-02. |
+| Walidacja | Python, FastAPI, parser SQL, `csv`, Psycopg; proponowana osobna instancja PostgreSQL do prób. | Metoda próbnego importu uzgodniona; biblioteki, zakres OD-01 i organizacja OD-02 nadal wymagają prób i doprecyzowania. |
 | Lokalny model | Ollama jako gotowe środowisko udostępniania modeli. | Preferowany kandydat, bez wyboru modelu i pobierania go. |
 | Komunikacja | HTTP + JSON + OpenAPI, HTTPX po stronie klientów Python. | Propozycja szczegółowa, bez brokera w bazowym MVP. |
 | Uruchomienie | Docker Compose; lokalny magazyn artefaktów za adapterem. | Propozycja szczegółowa. |
@@ -66,10 +67,14 @@ Projekt zakłada trzy własne procesy backendowe: zarządzanie, generowanie i wa
 
 Szczegółowe funkcje, operacje, kontrakty i granice opisano w [serwisach i technologiach](serwisy_i_technologie.md).
 
+Kolejnym poziomem jest [LLD v0.1](lld/README.md): struktura modułów, proponowane tabele i klucze, kontrakty API oraz maszyna stanów z transakcjami i fencing. To projekt do przeglądu; propozycje LP nie są nowymi zatwierdzonymi wymaganiami i nie zamykają OD.
+
+[Projekt walidacji](lld/walidacja.md) rozróżnia potwierdzony czteroetapowy przebieg od niezatwierdzonej macierzy typów i katalogu reguł. Pytanie o agregacje między tabelami nadal nie ma odpowiedzi.
+
 ## 5. Co nadal jest otwarte
 
 1. **OD-01:** macierz obsługiwanych typów, konstrukcji DDL, ograniczeń i wersji dialektu.
-2. **OD-02:** potwierdzenie mechanizmu importowalności. Próbny import do odizolowanego PostgreSQL jest rekomendacją, nie przyjętym wymaganiem.
+2. **OD-02 — częściowo rozstrzygnięte:** mechanizmem jest rzeczywisty próbny import do pustego, odizolowanego PostgreSQL. Otwarte pozostają wersja silnika, profil transakcji, provisioning, role i dokładna organizacja zasobów.
 3. **OD-03:** reguła wyboru między kilkoma użytecznymi kandydatami, bez domyślnej zbiorczej punktacji.
 4. **OD-04–OD-06:** dokładny profil SQL/CSV, raport, wykonywalna postać reguł oraz ich prezentacja do zatwierdzenia.
 5. **OD-07–OD-09:** wartości timeoutów, szczegóły anulowania, dostępność artefaktów po błędzie oraz retencja.

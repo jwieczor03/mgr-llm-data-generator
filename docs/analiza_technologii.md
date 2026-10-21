@@ -120,11 +120,12 @@ Proponowany odczyt statusu to proste odpytywanie, bez obowiązkowego WebSocket. 
 
 ## 6. Walidacja: ważniejsza próba niż ranking frameworków
 
-Rekomendowany do sprawdzenia układ:
+Układ doprecyzowany i potwierdzony w rozmowie 21 października 2026; konkretne adaptery nadal wymagają próby:
 
 1. Parser SQL lub odczyt CSV sprawdza format i zakres dozwolonych konstrukcji.
-2. Próbny import gotowych artefaktów do izolowanego PostgreSQL potwierdza typy i obsługiwane ograniczenia. Osobne sprawdzenia porównują rzeczywiste tabele i liczebności z planem.
-3. Zatwierdzone dodatkowe reguły są sprawdzane przez kontrolowane operacje, np. zapytania zwracające naruszenia, jeśli taka postać reguł zostanie przyjęta.
+2. Wstępna kontrola schematu i typów sprawdza nazwy tabel/kolumn, liczbę pól i możliwe do wiarygodnego wykrycia niezgodności, bez przepisywania danych.
+3. Rzeczywisty próbny import gotowych artefaktów do izolowanego PostgreSQL ostatecznie potwierdza typy i obsługiwane ograniczenia. Osobne sprawdzenia porównują rzeczywiste tabele i liczebności z planem.
+4. Zatwierdzone dodatkowe reguły są sprawdzane przez kontrolowane operacje, np. zapytania zwracające naruszenia, jeśli taka postać reguł zostanie przyjęta.
 
 PostgreSQL egzekwuje zadeklarowane ograniczenia, natomiast `COPY` ma parametry formatu CSV, wartości pustych i obsługi błędów [S10]. Nie wolno uzyskać sukcesu przez pomijanie błędnych wierszy. Sam udany import nie dowodzi kompletności planu ani spełnienia dodatkowych reguł.
 
@@ -132,7 +133,7 @@ Potrzebne są **odrębne środowiska danych aplikacji i walidacji**, bez wspóln
 
 Model zwraca gotowy wynik. W tym układzie nie używamy parsera do przepisywania go ani Pydantic do cichego konwertowania danych kandydata. Pydantic może domyślnie konwertować typy i udostępnia tryb ścisły [S15]; to narzędzie kontraktów aplikacji, nie zamiennik semantyki PostgreSQL.
 
-Próbny import pozostaje rekomendacją do rozstrzygnięcia w OD-02. Kolejność etapów jest już ustalona, ale nie wybiera automatycznie konkretnego parsera, silnika lub sposobu reprezentacji reguł biznesowych.
+Próbny import do PostgreSQL jest metodą uzgodnioną; w OD-02 pozostają jego szczegóły, w tym wersja silnika i organizacja środowiska. Kolejność etapów nie wybiera automatycznie konkretnego parsera ani sposobu reprezentacji reguł biznesowych. [Projekt walidacji](lld/walidacja.md) oddziela te statusy.
 
 ## 7. Parser: istotne ryzyko licencyjne i zgodności
 

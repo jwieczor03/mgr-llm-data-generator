@@ -14,6 +14,8 @@ Interfejs działa w lokalnej przeglądarce. Model przygotowuje gotowy SQL albo t
 
 Naruszenia danych uruchamiają automatyczne poprawki, domyślnie do 3 rund dla całego wykonania. Błąd techniczny kończy wykonanie bez automatycznego retry lub zmiany wariantu; użytkownik może uruchomić nową próbę.
 
+Uzgodniona walidacja: składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do odizolowanego PostgreSQL oraz kompletność → dodatkowe reguły biznesowe. Dokładna macierz typów i katalog reguł nadal wymagają zatwierdzenia.
+
 Architektura ma uwzględniać późniejsze hostowanie, logowanie, wielu użytkowników i skalowanie wykonania. W MVP przygotowujemy granice tych rozszerzeń, ale nie wdrażamy kont ani publicznego hostingu (REQ-066).
 
 Zapisane kierunki to PostgreSQL jako źródło danych i wersji schematów, opcjonalny pgvector zamiast obowiązkowej osobnej bazy wektorowej oraz własny kontrakt LLM z LiteLLM SDK jako preferowaną implementacją po testach. Szczegółowy projekt korzysta z bazowego wariantu Python/FastAPI + React/TypeScript i proponuje trzy własne serwisy backendowe: zarządzanie, generowanie i walidację.
@@ -25,6 +27,8 @@ Zapisane kierunki to PostgreSQL jako źródło danych i wersji schematów, opcjo
 | [Specyfikacja MVP](docs/specyfikacja_mvp.md) | Obowiązujące wymagania, kryteria wykonania i akceptacji oraz jawne otwarte decyzje. Punkt wyjścia do pracy nad aplikacją. |
 | [Rejestr ustaleń architektonicznych](docs/ustalenia_architektoniczne.md) | Zapis wymagań, kierunków LLM i bazy danych oraz statusów propozycji i otwartych decyzji. |
 | [Serwisy i technologie](docs/serwisy_i_technologie.md) | Szczegółowa propozycja funkcji, narzędzi, kontraktów, własności danych, API, testów i lokalnego uruchomienia każdego komponentu. |
+| [Architektura niskopoziomowa — LLD](docs/lld/README.md) | Projekt v0.1: moduły i interfejsy, model danych, kontrakty żądań/odpowiedzi, transakcje, maszyna stanów, anulowanie i okna awarii. |
+| [Walidacja — ustalenia i propozycje](docs/lld/walidacja.md) | Potwierdzone cztery etapy i próbny import; oddzielnie zapisana proponowana macierz PostgreSQL, środowisko i reprezentacja reguł, w tym otwarte pytanie o agregacje. |
 | [Architektura ogólna](docs/architektura.md) | Aktualny roboczy szkic odpowiedzialności, własności danych i przepływu, z uzgodnionym rozróżnieniem błędów technicznych i naruszeń danych. Podział procesów pozostaje propozycją. |
 | [Analiza technologii](docs/analiza_technologii.md) | Wstępne porównanie FastAPI, NestJS i Django oraz narzędzi interfejsu, modeli, walidacji i uruchomienia. Rekomendacja do weryfikacji, nie zatwierdzony stos. |
 | [Przepływy funkcjonalne](docs/przeplywy_funkcjonalne.md) | Objaśnienie zachowania opisanego w specyfikacji, bez narzucania architektury i technologii. |

@@ -6,7 +6,9 @@
 
 **Podstawa:** [specyfikacja MVP](specyfikacja_mvp.md), [architektura ogólna](architektura.md), [analiza technologii](analiza_technologii.md) i [granice przyszłego hostowania](przygotowanie_do_hostowania.md).
 
-Nie zmieniamy wymagań przez szczegółowy projekt. W szczególności próbny import, parser, profil eksportu, sposób wykonywania reguł i wybór kandydata nadal podlegają otwartym decyzjom specyfikacji.
+Nie zmieniamy wymagań przez szczegółowy projekt. Próbny import i cztery etapy walidacji potwierdzono w rozmowie 21 października 2026 i zapisano w specyfikacji v1.4. Szczegóły środowiska, parser, profil eksportu, sposób wykonywania reguł i wybór kandydata nadal podlegają otwartym decyzjom.
+
+**Rozwinięcie implementacyjne:** [architektura niskopoziomowa v0.1](lld/README.md) opisuje moduły, interfejsy, pola danych, transakcje, dokładniejsze kontrakty i cykl wykonania. Nazwy stanów z wcześniejszej rozpiski są tam doprecyzowane jako propozycja.
 
 ## 1. Docelowy podział lokalnego MVP
 
@@ -15,9 +17,9 @@ Nie zmieniamy wymagań przez szczegółowy projekt. W szczególności próbny im
 | `web` | Aplikacja w przeglądarce, nie serwis domenowy. | Interakcje, formularze, zatwierdzanie, status, historia i odbiór wyniku. | TypeScript, React, Vite, Mantine; proponowany TanStack Query. |
 | `application-api` | Własny serwis zarządzający. | Projekty, schematy, reguły, plan danych, wykonania, kontekst, historia, raport i eksport. | Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Psycopg, HTTPX. |
 | `generation-service` | Własny serwis modelowy. | Interpretacja wymagań, wariant generowania, prompty, przygotowanie gotowych artefaktów i reakcja na zleconą poprawkę. | Python, FastAPI, Pydantic; LiteLLM SDK za adapterem. |
-| `validation-service` | Własny serwis sprawdzeń. | Walidacja gotowych artefaktów, zgodność z planem, raport naruszeń i obsługa środowiska próbnego. | Python, FastAPI, Pydantic, parser SQL, `csv`; warunkowo Psycopg. |
+| `validation-service` | Własny serwis sprawdzeń. | Walidacja gotowych artefaktów, zgodność z planem, raport naruszeń i obsługa środowiska próbnego. | Proponowane Python, FastAPI, Pydantic, parser SQL, `csv` i Psycopg. |
 | `app-db` | Gotowa baza aplikacji. | Nasz model trwałych danych i migracje. | PostgreSQL; opcjonalnie pgvector po osobnej decyzji. |
-| `validation-db` | Gotowe środowisko sprawdzeń, jeśli wybierzemy próbny import. | Przydział i sprzątanie odizolowanego obszaru próby, bez własnego silnika bazy. | Osobna instancja PostgreSQL, ograniczone role i zasoby. |
+| `validation-db` | Gotowe środowisko rzeczywistego próbnego importu. | Przydział i sprzątanie odizolowanego obszaru próby, bez własnego silnika bazy. | Proponowana osobna instancja PostgreSQL, ograniczone role i zasoby. |
 | `ollama` | Gotowe, opcjonalne środowisko modeli lokalnych. | Konfiguracja połączenia, identyfikacja modelu i pomiary. | Ollama; bez własnej inferencji i obsługi GPU. |
 | Magazyn plików | Zależność backendu, nie dodatkowy mikroserwis. | Adapter, identyfikatory, kontrola dostępu, integralność i metadane. | Lokalny katalog/wolumen; standardowe operacje plikowe i `zipfile`. |
 
@@ -33,7 +35,7 @@ flowchart LR
     G -->|"LlmClient i LiteLLM SDK"| M["Ollama albo API dostawcy"]
     A -->|"Kandydat, wymagania i profil sprawdzeń"| V["validation-service"]
     V -->|"Odczyt wskazanych artefaktów: ograniczone API"| A
-    V -->|"Tylko po wyborze próbnego importu"| S[("validation-db: osobny PostgreSQL")]
+    V -->|"Rzeczywisty próbny import"| S[("validation-db: proponowany osobny PostgreSQL")]
 ```
 
 Usługi wewnętrzne nie korzystają z tabel `app-db`. Diagram pokazuje kierunki wywołań; każda operacja ma odpowiedź i identyfikatory korelacyjne.
@@ -212,22 +214,25 @@ Pierwsze testy wykorzystują kontrolowany endpoint modelowy, bez płatnych wywo�
 | --- | --- | --- |
 | Przyjęcie kandydata | Manifest, format, rozmiary, przypisanie do tabel, hashe i zgodność referencji. | Własny kontrakt i ograniczony `ArtifactReader`. |
 | 1. Składnia / format | Dozwolone SQL `INSERT` albo poprawny profil CSV; bez zmiany treści. | Parser SQL oraz standardowy moduł `csv` [T12]. |
-| 2. Typy / schemat | Obsługiwane typy, `NOT NULL`, PK, FK, `UNIQUE`, `CHECK`, dozwolone wartości domyślne i relacje w całej paczce. | Rekomendowany próbny import, jeśli zatwierdzimy OD-02; PostgreSQL i Psycopg [T13, T14]. |
-| 2. Kompletność | Rzeczywisty zakres i liczebności wobec planu, także brakujące i nieuzgodnione tabele. | Własne porównanie; liczenie na pełnej paczce, nie samych liniach pliku. |
-| 3. Reguły biznesowe | Zatwierdzone dodatkowe sprawdzenia, zakres, liczba, jednostka i przykłady naruszeń. | `BusinessRuleEvaluator`; ograniczony mechanizm do ustalenia, nie dowolny kod modelu. |
+| 2. Wstępna zgodność ze schematem i typami | Istnienie tabel/kolumn, liczba pól i wiarygodnie rozpoznawalne niezgodności wartości. | Parser i własne sprawdzenia wstępne, bez odtwarzania pełnego systemu typów ani zmiany danych. |
+| 3. Próbny import | Ostateczne potwierdzenie typów, obsługiwanych `NOT NULL`, PK, FK, `UNIQUE`, `CHECK`, wartości domyślnych i relacji w całej paczce. | Uzgodniony rzeczywisty import do PostgreSQL; proponowany adapter Psycopg [T13, T14]. |
+| 3. Kompletność | Rzeczywisty zakres i liczebności wobec planu, także brakujące i nieuzgodnione tabele. | Własne porównanie po imporcie; liczenie na pełnej paczce, nie samych liniach pliku. |
+| 4. Reguły biznesowe | Zatwierdzone dodatkowe sprawdzenia, zakres, liczba, jednostka i przykłady naruszeń. | `BusinessRuleEvaluator`; ograniczony mechanizm do ustalenia, nie dowolny kod modelu. |
 | Zakończenie | Raport oraz sprzątanie środowiska. | Własna orkiestracja sprawdzeń i adapter środowiska. |
 
-Etap drugi może zawierać kilka sprawdzeń wewnętrznych. Jeśli wcześniejszy etap uniemożliwia następny, oznaczamy go jako niewykonany z przyczyną. Nie zwracamy pozytywnej oceny domyślnie.
+Etap drugi jest kontrolą wstępną, nie dowodem udanego importu. Jeśli wcześniejszy etap uniemożliwia następny, oznaczamy go jako niewykonany z przyczyną. Nie zwracamy pozytywnej oceny domyślnie. Pełny zapis potwierdzeń i propozycji zawiera [projekt walidacji](lld/walidacja.md).
 
 ### 5.2. Narzędzia
 
 - **Python + FastAPI + Pydantic** — kontrakty serwisu.
 - **`SqlParser`** — port. SQLGlot jako pierwszy kandydat do próby, nie zatwierdzona zgodność całego dialektu. pglast pozostaje alternatywą po ocenie licencji i wersji.
 - **`csv`** — odczyt i sprawdzanie formatu bez zapisu poprawionego CSV. Proponujemy jawny dialekt, tryb ścisły, kontrolę nagłówków i liczby pól; bez zgadywania profilu i konwersji wartości do liczb przez parser [T12].
-- **Psycopg** — sterownik, transakcje i transfer CSV przez `COPY FROM STDIN` przy wyborze próbnego importu [T14].
+- **Psycopg** — proponowany sterownik, transakcje i transfer CSV przez `COPY FROM STDIN` w wybranej metodzie próbnego importu [T14].
 - **Osobny PostgreSQL** — środowisko prób, nie `app-db`. Nie generujemy z DDL użytkownika modeli SQLAlchemy.
 
-### 5.3. Próbny import — konkretna rekomendacja, nadal OD-02
+### 5.3. Próbny import — metoda uzgodniona, organizacja nadal OD-02
+
+Wybrano rzeczywisty import po wstępnej kontroli schematu i typów. Poniższe szczegóły provisioningu i izolacji pozostają projektem do weryfikacji, nie potwierdzeniem gotowego środowiska.
 
 1. Sprawdzamy DDL i gotowy artefakt względem jawnie dozwolonego podzbioru, także wyrażeń i funkcji.
 2. Przydzielamy pusty obszar w osobnej instancji walidacyjnej i ograniczoną rolę bez dostępu do innych prób.
@@ -292,7 +297,7 @@ Port `ArtifactStore` ukrywa katalog hosta. W bazowym wariancie proponujemy `Loca
 
 ### 7.3. `validation-db`
 
-Tylko przy wyborze próbnego importu. Osobna instancja, konta, sieć, limity i dane tymczasowe. Nie przechowuje historii badań. Sprzątanie pozostałości po awarii nie oznacza wznowienia walidacji.
+Środowisko wybranego próbnego importu. Proponowana osobna instancja, konta, sieć, limity i dane tymczasowe. Nie przechowuje historii badań. Sprzątanie pozostałości po awarii nie oznacza wznowienia walidacji.
 
 ### 7.4. Ollama i API zewnętrzne
 
@@ -415,7 +420,7 @@ Wariant bez logowania nie jest konfiguracją gotową do publicznego hostowania.
 | Decyzja / próba | Dlaczego blokuje odpowiedni fragment implementacji |
 | --- | --- |
 | Macierz DDL i parser — OD-01 | Nie można obiecać dowolnej składni ani wybrać parsera na podstawie samej nazwy. |
-| Próbny import — OD-02 | Determinuje środowisko walidacji i sposób dowodzenia importowalności. |
+| Szczegóły próbnego importu — pozostała część OD-02 | Metodę już wybrano; trzeba zweryfikować wersję silnika, transakcje, provisioning, role i izolację. |
 | Wykonywalne reguły — OD-06 | Potrzebny ograniczony zakres i sposób zatwierdzania; nie uruchamiamy dowolnego SQL lub Pythona od modelu. |
 | Profile plików — OD-04 i OD-10 | Ten sam profil musi obowiązywać model, walidator i pobierany wynik. |
 | Wybór kandydata — OD-03 | Wcześniejszy użyteczny wynik jest chroniony, ale wagi lub ranking nie zostały zatwierdzone. |

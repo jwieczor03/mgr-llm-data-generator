@@ -1,10 +1,10 @@
 # Specyfikacja funkcjonalna MVP — generator relacyjnych danych testowych
 
-**Wersja:** 1.3
+**Wersja:** 1.4
 
-**Data:** 20 października 2026
+**Data:** 21 października 2026
 
-**Podstawa:** wywiad dotyczący wymagań i potwierdzenie zakresu w pytaniu Q42 oraz późniejsze uzgodnienia rozwoju do wielu użytkowników, lokalnego interfejsu webowego, gotowego wyniku modelu, etapów walidacji i braku wznawiania.
+**Podstawa:** wywiad dotyczący wymagań i potwierdzenie zakresu w pytaniu Q42 oraz późniejsze uzgodnienia rozwoju do wielu użytkowników, lokalnego interfejsu webowego, gotowego wyniku modelu, etapów walidacji i braku wznawiania. Uzupełnienie 21 października 2026: potwierdzona kolejność walidacji z wstępną kontrolą typów i rzeczywistym próbnym importem przed regułami biznesowymi.
 
 **Status:** zatwierdzony zakres MVP; szczegóły wymienione w sekcji 16 wymagają dalszych decyzji.
 
@@ -12,9 +12,9 @@
 
 Dokument określa, **co ma robić aplikacja**, jakie wyniki ma dostarczać i kiedy można uznać jej zachowanie za prawidłowe. Nie określa sposobu implementacji.
 
-W szczególności nie wybiera języka, frameworka, bibliotek, architektury wdrożeniowej, sposobu przechowywania danych, narzędzi do obsługi modeli ani mechanizmu budowy walidatorów.
+W szczególności nie wybiera języka, frameworka, bibliotek, architektury wdrożeniowej, sposobu przechowywania danych ani narzędzi do obsługi modeli. Określa uzgodnioną metodę potwierdzania importowalności, ale nie wybiera bibliotek i szczegółowej realizacji walidatora.
 
-Wymagania oznaczone identyfikatorami `REQ-…` należą do uzgodnionego zakresu. Przykłady ilustrują zachowanie, ale nie narzucają nazw tabel, domeny biznesowej ani konkretnych liczebności. Punkty `OD-…` są jawnie nierozstrzygnięte — nie należy traktować ich jako domyślnie zatwierdzonych rozwiązań.
+Wymagania oznaczone identyfikatorami `REQ-…` należą do uzgodnionego zakresu. Przykłady ilustrują zachowanie, ale nie narzucają nazw tabel, domeny biznesowej ani konkretnych liczebności. Punkty `OD-…` wskazują nierozstrzygnięte szczegóły; przy częściowym rozstrzygnięciu zapisujemy, co już przyjęto, a co nadal jest otwarte.
 
 ### 1.1. Relacja do wcześniejszych materiałów
 
@@ -203,12 +203,19 @@ Liczby są przykładowe. Nie stanowią domyślnych proporcji dla każdego projek
 | REQ-027 | Zadanie jest wykonane wyłącznie wtedy, gdy wybrany wynik jest kompletny i importowalny. |
 | REQ-028 | Brak wymaganej liczby rekordów oznacza niewykonanie zadania, nawet jeśli dostępna część nadaje się do importu. |
 | REQ-029 | Naruszenia dodatkowych reguł biznesowych obniżają zgodność jakościową, ale nie odbierają statusu wykonania wynikowi kompletnemu i importowalnemu. |
-| REQ-030 | Potwierdzenie importowalności może opierać się na systemie walidacyjnym albo próbie importu. Wybrany mechanizm musi mieć jawny zakres; sama deklaracja modelu nie jest dowodem poprawności. |
+| REQ-030 | Importowalność jest potwierdzana rzeczywistym próbnym importem kandydata do pustego, odizolowanego środowiska PostgreSQL z zatwierdzonym schematem. Dla SQL sprawdzane są gotowe polecenia `INSERT`, a dla CSV rzeczywisty import plików. Zakres potwierdzenia musi być jawny; sama analiza statyczna lub deklaracja modelu nie jest dowodem udanego importu. |
 | REQ-031 | Niewykonane, nieobsługiwane lub nierozstrzygnięte sprawdzenie nie może zostać przedstawione jako pozytywna weryfikacja. Jeśli dotyczy obowiązkowego warunku wykonania, aplikacja nie może potwierdzić sukcesu. |
 
-Uzgodniono kolejność warstw walidacji: najpierw składnia i format, następnie zgodność typów i schematu, a na końcu dodatkowe reguły biznesowe. Zachowane są również wymagania sprawdzenia ograniczeń, integralności relacji i kompletności; nie zastępujemy ich samym sprawdzeniem typów. Dokładne rozmieszczenie sprawdzeń w warstwie zgodności schematu pozostaje szczegółem projektu.
+Uzgodniono cztery kolejne etapy walidacji:
 
-Jeżeli wcześniejszy etap uniemożliwia dalsze sprawdzenia, są one oznaczane jako niewykonane, a nie pozytywne. Kolejność warstw nie wybiera mechanizmu potwierdzania importowalności.
+1. **Składnia i format** — sprawdzenie budowy SQL/CSV i dozwolonego zakresu konstrukcji, bez wykonania danych.
+2. **Wstępna zgodność ze schematem i typami** — istnienie tabel i kolumn, zgodność liczby pól oraz możliwe do wiarygodnego wykrycia błędy wartości. Nie budujemy odrębnego pełnego systemu typów PostgreSQL i nie zmieniamy danych przez ciche konwersje.
+3. **Próbny import i kompletność** — rzeczywiste wykonanie gotowych `INSERT` lub import CSV potwierdza typy i obsługiwane ograniczenia schematu, w tym relacje; osobno porównujemy rzeczywisty zakres i liczebności z planem. Dla CSV projekt zakłada `COPY FROM STDIN`, bez tworzenia zastępczych `INSERT`.
+4. **Dodatkowe reguły biznesowe** — sprawdzenie zatwierdzonych kryteriów na załadowanych danych. Nie zastępują ograniczeń zapisanych w DDL.
+
+Wstępne sprawdzenie typów nie jest ostatecznym potwierdzeniem importowalności. Jeżeli wcześniejszy etap uniemożliwia dalsze sprawdzenia, są one oznaczane jako niewykonane, a nie pozytywne. Naruszenia danych uruchamiają poprawki w dostępnym limicie; awarie techniczne zatrzymują wykonanie bez retry.
+
+Szczegółowy zapis uzgodnienia i odrębnych propozycji znajduje się w [projekcie walidacji](lld/walidacja.md). Zatwierdzenie kolejności i próbnego importu nie zatwierdza całej proponowanej macierzy typów, profilu plików ani katalogu reguł biznesowych.
 
 ### 7.2. Zakres sprawdzeń
 
@@ -498,7 +505,7 @@ Zakres MVP jest potwierdzony, ale nie wszystkie szczegóły kontraktów są już
 | ID | Decyzja do podjęcia | Co już wiadomo |
 | --- | --- | --- |
 | OD-01 | Dokładna macierz obsługiwanych elementów PostgreSQL: typy, postacie kluczy, wyrażenia `CHECK` i `DEFAULT`, ewentualne dodatkowe wymagania importu. | Obsługiwany jest jawnie określony podzbiór tabel i ograniczeń. Nie obiecano obsługi całego PostgreSQL. |
-| OD-02 | Mechanizm potwierdzania importowalności i jego szczegółowy zakres. | Dopuszczono system walidacyjny albo próbę importu; nie wybrano rozwiązania. Ustalono kolejność warstw: składnia/format, typy i schemat, dodatkowe reguły biznesowe. |
+| OD-02 | Szczegółowy zakres i organizacja próbnego importu: wersja silnika, profil transakcji, provisioning i izolacja zasobów. | Częściowo rozstrzygnięte 21 października 2026: wybrano rzeczywisty próbny import do pustego, odizolowanego PostgreSQL. Kolejność: składnia/format → wstępna zgodność schematu i typów → import oraz kompletność → reguły biznesowe. Nie zatwierdzono jeszcze szczegółów środowiska. |
 | OD-03 | Wybór między kilkoma kompletnymi i importowalnymi kandydatami o różnej zgodności biznesowej. | Użyteczny kandydat nie może zostać utracony przez późniejsze nieudane poprawki. Nie zatwierdzono wag ani zbiorczej punktacji. |
 | OD-04 | Dokładny profil CSV i postać eksportu poleceń `INSERT`. | Użytkownik wybiera jeden format, a CSV dla wielu tabel jest paczką plików z kolejnością importu. |
 | OD-05 | Minimalny format prostego raportu oraz sposób powiązania go z obszerniejszą historią wiadomości. | Raport ma być maszynowo czytelny i prosty; nie budujemy modułu analitycznego. |
@@ -540,3 +547,8 @@ Decyzje dotyczące implementacji nie powinny zastępować decyzji o wymaganiach.
 | Przygotowanie do hostowania, wielu użytkowników i logowania bez wdrażania tych funkcji w MVP | Dodatkowe uzgodnienie podczas projektowania architektury, 20 października 2026. |
 | Lokalny interfejs webowy, gotowy wynik modelu, kolejność walidacji i brak wznawiania | Odpowiedzi na pięć pytań architektonicznych, 20 października 2026. |
 | Rozróżnienie błędów technicznych i naruszeń danych | Potwierdzenie 20 października 2026: błędy techniczne kończą wykonanie, naruszenia danych nadal uruchamiają ograniczone poprawki. |
+| Cztery etapy walidacji i rzeczywisty próbny import | Doprecyzowanie użytkownika i polecenie zapisania ustaleń, 21 października 2026. Wstępna kontrola typów poprzedza próbny import; końcowe sprawdzenie dodatkowych reguł działa na załadowanych danych. |
+
+## 18. Zmiany w wersji 1.4
+
+21 października 2026 doprecyzowano REQ-030 oraz sekcję 7.1 i częściowo rozstrzygnięto OD-02 zgodnie z rozmową. Liczba identyfikatorów pozostaje bez zmian: 70 wymagań, 32 kryteria akceptacji i 12 punktów OD. Nie zatwierdzono macierzy OD-01 ani wykonywalnej reprezentacji reguł i agregacji z OD-06.
