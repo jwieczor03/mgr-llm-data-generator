@@ -1,10 +1,10 @@
 # Specyfikacja funkcjonalna MVP — generator relacyjnych danych testowych
 
-**Wersja:** 1.0
+**Wersja:** 1.3
 
 **Data:** 20 października 2026
 
-**Podstawa:** wywiad dotyczący wymagań i potwierdzenie zakresu w pytaniu Q42.
+**Podstawa:** wywiad dotyczący wymagań i potwierdzenie zakresu w pytaniu Q42 oraz późniejsze uzgodnienia rozwoju do wielu użytkowników, lokalnego interfejsu webowego, gotowego wyniku modelu, etapów walidacji i braku wznawiania.
 
 **Status:** zatwierdzony zakres MVP; szczegóły wymienione w sekcji 16 wymagają dalszych decyzji.
 
@@ -95,6 +95,7 @@ W MVP role te może pełnić ta sama osoba. Nie oznaczają one kont ani poziomó
 | REQ-006 | Dane są generowane jako samodzielna paczka dla bazy bez istniejących danych; nie zakłada się dostępności klientów, produktów ani innych rekordów poza paczką. |
 | REQ-007 | Docelowa skala MVP obejmuje setki do kilku tysięcy rekordów łącznie we wszystkich uzupełnianych tabelach. Jest to zakres oczekiwanego użycia, a nie zatwierdzony sztywny limit liczbowy. |
 | REQ-008 | Użytkownik wybiera wynik w postaci poleceń `INSERT` albo CSV. Generowanie obu formatów jednocześnie nie jest wymagane. |
+| REQ-067 | MVP jest aplikacją webową uruchamianą lokalnie i obsługiwaną przez przeglądarkę. Nie wybiera to frameworka interfejsu ani backendu. |
 
 ### 4.2. Poza zakresem MVP
 
@@ -205,7 +206,9 @@ Liczby są przykładowe. Nie stanowią domyślnych proporcji dla każdego projek
 | REQ-030 | Potwierdzenie importowalności może opierać się na systemie walidacyjnym albo próbie importu. Wybrany mechanizm musi mieć jawny zakres; sama deklaracja modelu nie jest dowodem poprawności. |
 | REQ-031 | Niewykonane, nieobsługiwane lub nierozstrzygnięte sprawdzenie nie może zostać przedstawione jako pozytywna weryfikacja. Jeśli dotyczy obowiązkowego warunku wykonania, aplikacja nie może potwierdzić sukcesu. |
 
-Nie przesądza się, czy warstwy walidacji są wykonywane sekwencyjnie, równolegle czy inaczej. Wymagana jest zgodność ich znaczenia z powyższymi kryteriami.
+Uzgodniono kolejność warstw walidacji: najpierw składnia i format, następnie zgodność typów i schematu, a na końcu dodatkowe reguły biznesowe. Zachowane są również wymagania sprawdzenia ograniczeń, integralności relacji i kompletności; nie zastępujemy ich samym sprawdzeniem typów. Dokładne rozmieszczenie sprawdzeń w warstwie zgodności schematu pozostaje szczegółem projektu.
+
+Jeżeli wcześniejszy etap uniemożliwia dalsze sprawdzenia, są one oznaczane jako niewykonane, a nie pozytywne. Kolejność warstw nie wybiera mechanizmu potwierdzania importowalności.
 
 ### 7.2. Zakres sprawdzeń
 
@@ -247,6 +250,10 @@ Przykłady interpretacji:
 10. Proces kończy się po uzyskaniu wymaganego wyniku bez dalszych wykrytych naruszeń sprawdzalnych reguł, wyczerpaniu limitu, anulowaniu lub wystąpieniu błędu uniemożliwiającego kontynuację.
 11. Użytkownik otrzymuje status, dostępny wynik i prosty raport.
 
+| ID | Wymaganie |
+| --- | --- |
+| REQ-068 | Model przygotowuje gotowy wynik w wybranym formacie: polecenia `INSERT` albo treść plików CSV. Aplikacja może wyodrębniać, zapisywać, sprawdzać i pakować tę zawartość, ale nie zastępuje jej deterministycznym generowaniem SQL/CSV z pośrednich rekordów ani nie poprawia po cichu danych. Zmieniona wersja danych jest osobnym kandydatem. |
+
 ### 8.2. Zasady poprawek
 
 | ID | Wymaganie |
@@ -258,7 +265,7 @@ Przykłady interpretacji:
 | REQ-036 | Poprawki muszą odnosić się do wykrytych problemów, bez samowolnej zmiany zatwierdzonych wymagań. Sposób i szczegółowość naprawy pozostają częścią badanego wariantu. |
 | REQ-037 | Po wyczerpaniu limitu wykonanie kończy się z rzeczywistym wynikiem weryfikacji. Nie powstaje kolejna niejawna seria prób. |
 
-Limit 3 rund oznacza pierwszy kandydat i maksymalnie 3 kolejne rundy naprawcze, a nie łącznie 3 wywołania modelu. Dokładne rozliczenie wywołań technicznych i ponowień po błędach komunikacji wymaga osobnej decyzji.
+Limit 3 rund oznacza pierwszy kandydat i maksymalnie 3 kolejne rundy naprawcze, a nie łącznie 3 wywołania modelu. Wykryte naruszenie danych jest wynikiem walidacji i uruchamia poprawki w granicach tego limitu. Błąd techniczny nie jest rundą naprawczą: kończy wykonanie bez automatycznego ponowienia.
 
 ### 8.3. Zachowanie wcześniejszego wyniku
 
@@ -278,6 +285,17 @@ Nie ustalono jeszcze reguły wyboru między kilkoma kompletnymi i importowalnymi
 | REQ-042 | Anulowane wykonanie zachowuje dotychczasową historię oraz dostępne pomiary i jest odróżnione od niepowodzenia modelu. |
 
 Nie zakłada się, że anulowanie zawsze natychmiast przerwie już obsługiwane zewnętrzne żądanie. Szczegóły momentu zatrzymania i dostępności częściowego wyniku pozostają do doprecyzowania.
+
+### 8.5. Brak wznawiania i błędy techniczne
+
+| ID | Wymaganie |
+| --- | --- |
+| REQ-069 | MVP nie wznawia wykonania po anulowaniu, błędzie kończącym proces ani utracie procesu aplikacji. Użytkownik może uruchomić nowe wykonanie od początku zgodnie z zasadami ręcznego ponawiania. Historia poprzedniej próby pozostaje zachowana. |
+| REQ-070 | Błąd techniczny uniemożliwiający kontynuację, np. błąd połączenia z modelem lub awaria walidatora, kończy wykonanie jako przerwane błędem. MVP nie ponawia automatycznie nieudanej operacji, nie przełącza po takim błędzie wariantu i nie rozpoczyna rundy naprawczej. Użytkownik może ręcznie uruchomić nowe wykonanie od początku. |
+
+Uzgodniono rozróżnienie błędu technicznego od naruszeń wykrytych w danych. REQ-032–REQ-037 o ograniczonych poprawkach pozostają obowiązujące. Otrzymany wynik z niepoprawną składnią, typem, relacją, liczebnością lub naruszeniem reguły biznesowej jest kandydatem z naruszeniami, a nie sam przez się awarią techniczną. Brak wznawiania nie oznacza rezygnacji z trwałej historii ani odczytu statusu istniejącego wykonania.
+
+Zakaz technicznego retry obejmuje także konfigurację wykorzystywanych klientów i bibliotek. Timeout kończy nieudaną operację; nie zakłada się, że zewnętrzny dostawca natychmiast przerwał jej obsługę. Historia zachowuje dostępne informacje o próbie, a spóźniona odpowiedź nie wznawia zakończonego procesu.
 
 ## 9. Statusy i prezentacja wyniku
 
@@ -407,6 +425,18 @@ Nie ustalono wymogu automatycznego wykrywania poufnych danych ani rozbudowanego 
 - Nie ustalono maksymalnego dopuszczalnego czasu generowania ani gwarancji wydajności.
 - Możliwość anulowania i skończony limit poprawek nie zastępują jeszcze decyzji dotyczącej timeoutów i błędów komunikacji.
 
+### 13.4. Przygotowanie do hostowania i wielu użytkowników
+
+Uzupełnienie uzgodnione 20 października 2026: lokalny i jednoosobowy sposób uruchomienia jest zakresem MVP, a nie docelowym ograniczeniem całej aplikacji.
+
+| ID | Wymaganie |
+| --- | --- |
+| REQ-066 | Architektura MVP uwzględnia późniejsze hostowanie, logowanie, izolację danych wielu użytkowników i skalowanie wykonania. Granice odpowiedzialności powinny umożliwiać dodanie tych funkcji bez zastępowania rdzenia przygotowania zleceń, generowania, walidacji i raportowania. Nie oznacza to wdrożenia tych funkcji w MVP ani gwarancji ich dodania bez zmian integracyjnych, migracji i testów. |
+
+Przygotowanie obejmuje zaprojektowanie źródła kontekstu użytkownika, własności i zakresu dostępu do danych, granicy kontroli dostępu, trwałego stanu zadań oraz wymiennych zależności wdrożeniowych. Szczegóły stanowią propozycję w dokumencie [przygotowanie do hostowania](przygotowanie_do_hostowania.md), nie wybór technologii.
+
+REQ-001 i REQ-002 pozostają bez zmian. Konta, logowanie, współdzielenie i publiczne wdrożenie nadal nie są funkcjami wymaganymi od MVP. Gotowość architektury do rozwoju nie jest potwierdzeniem bezpieczeństwa wdrożenia wieloużytkownikowego ani wydajności przy nieustalonym obciążeniu.
+
 ## 14. Scenariusze i kryteria akceptacji
 
 Poniższe kryteria opisują oczekiwane zachowanie. Nie narzucają narzędzi testowych ani sposobu implementacji testów.
@@ -440,6 +470,11 @@ Poniższe kryteria opisują oczekiwane zachowanie. Nie narzucają narzędzi test
 | AC-25 | Dane wraz z prostym raportem można pobrać i powiązać w przyszłym zewnętrznym narzędziu oceniającym z konkretnym wykonaniem. | REQ-047, REQ-052 |
 | AC-26 | Dostawca nie udostępnia liczby tokenów albo nie ustalono kosztu lokalnego. Raport oznacza brak danych, zamiast wpisywać zero. | REQ-064, REQ-065 |
 | AC-27 | Autor ręcznie podłącza kolejny lokalny lub zewnętrzny wariant i ponawia zadanie. Nie musi budować workflow ani uruchamiać automatycznej serii eksperymentów w interfejsie. | REQ-060, REQ-061, REQ-063 |
+| AC-28 | Przegląd architektury identyfikuje granice kontekstu użytkownika, własności danych, kontroli dostępu, trwałego stanu zadań i zależności wdrożeniowych oraz wskazuje drogę rozwoju bez zastępowania rdzenia generatora. Odbiór MVP nie wymaga działającego logowania, wielu kont ani testów obciążeniowych przyszłego wdrożenia. | REQ-001, REQ-002, REQ-066 |
+| AC-29 | Użytkownik korzysta z lokalnie uruchomionej aplikacji przez przeglądarkę. Nie jest wymagane logowanie ani publiczny hosting. | REQ-001, REQ-002, REQ-067 |
+| AC-30 | Model przygotowuje wynik w wybranym formacie. Raport odnosi się do wyodrębnionej zawartości konkretnego kandydata, a pakowanie lub pobieranie nie zmienia sprawdzonych danych. Błędy nie są ukrywane przez ciche poprawianie danych przez aplikację. | REQ-040, REQ-043, REQ-068 |
+| AC-31 | Po anulowaniu lub przerwaniu błędem użytkownik uruchamia nowe wykonanie od początku. Aplikacja nie kontynuuje starej próby z checkpointu ani nie nadpisuje jej historii. | REQ-052, REQ-058, REQ-059, REQ-069 |
+| AC-32 | Błąd połączenia z modelem lub awaria walidatora kończy wykonanie bez automatycznego retry, zmiany wariantu i uruchamiania rundy naprawczej. Natomiast poprawnie odebrany SQL/CSV z wykrytym naruszeniem danych uruchamia poprawki w granicach limitu. | REQ-032, REQ-033, REQ-069, REQ-070 |
 
 ## 15. Kierunki rozszerzeń
 
@@ -463,17 +498,17 @@ Zakres MVP jest potwierdzony, ale nie wszystkie szczegóły kontraktów są już
 | ID | Decyzja do podjęcia | Co już wiadomo |
 | --- | --- | --- |
 | OD-01 | Dokładna macierz obsługiwanych elementów PostgreSQL: typy, postacie kluczy, wyrażenia `CHECK` i `DEFAULT`, ewentualne dodatkowe wymagania importu. | Obsługiwany jest jawnie określony podzbiór tabel i ograniczeń. Nie obiecano obsługi całego PostgreSQL. |
-| OD-02 | Mechanizm potwierdzania importowalności i jego szczegółowy zakres. | Dopuszczono system walidacyjny albo próbę importu; nie wybrano rozwiązania. |
+| OD-02 | Mechanizm potwierdzania importowalności i jego szczegółowy zakres. | Dopuszczono system walidacyjny albo próbę importu; nie wybrano rozwiązania. Ustalono kolejność warstw: składnia/format, typy i schemat, dodatkowe reguły biznesowe. |
 | OD-03 | Wybór między kilkoma kompletnymi i importowalnymi kandydatami o różnej zgodności biznesowej. | Użyteczny kandydat nie może zostać utracony przez późniejsze nieudane poprawki. Nie zatwierdzono wag ani zbiorczej punktacji. |
 | OD-04 | Dokładny profil CSV i postać eksportu poleceń `INSERT`. | Użytkownik wybiera jeden format, a CSV dla wielu tabel jest paczką plików z kolejnością importu. |
 | OD-05 | Minimalny format prostego raportu oraz sposób powiązania go z obszerniejszą historią wiadomości. | Raport ma być maszynowo czytelny i prosty; nie budujemy modułu analitycznego. |
 | OD-06 | Szczegółowa postać prezentacji i zatwierdzania interpretacji reguł oraz organizacja reguł projektu i zlecenia. | Użytkownik zna kryterium sprawdzenia przed generowaniem; wskazówki jakościowe są odrębne. |
-| OD-07 | Timeouty, ponawianie po błędach komunikacji i rozliczanie takich zdarzeń względem limitów. | Limit poprawek danych jest skończony i nie oznacza limitu wywołań modeli. |
-| OD-08 | Dokładne zachowanie przy anulowaniu i błędzie operacyjnym, jeśli istnieje już użyteczny kandydat lub częściowe artefakty. | Historia jest zachowana, a anulowanie i błąd nie są utożsamiane z normalnym niepowodzeniem generowania. |
+| OD-07 | Konkretne wartości timeoutów i sposób zapisania niepełnych informacji o nieudanej lub niepewnej operacji, w tym dostępnych pomiarów. | Błąd techniczny kończy wykonanie bez automatycznego retry i zmiany wariantu. Naruszenia danych uruchamiają ograniczone poprawki. Ręczne ponowienie tworzy nowe wykonanie; nie ma wznawiania. |
+| OD-08 | Dostępność użytecznego kandydata lub częściowych artefaktów po anulowaniu i błędzie operacyjnym oraz dokładny moment zatrzymania. | Historia jest zachowana; nie ma wznawiania. Anulowanie i błąd nie są utożsamiane z normalnym niepowodzeniem generowania. |
 | OD-09 | Zasady usuwania projektów, historii, dużych odpowiedzi i eksportów oraz czas ich przechowywania. | Wymagana jest historia potrzebna do badań; nie ustalono jej limitów ani polityki retencji. |
-| OD-10 | Konkretne warianty badawcze i granica odpowiedzialności modeli oraz pomocy deterministycznej. | Autor ręcznie porównuje różne rozwiązania; specyfikacja nie przesądza, kto generuje identyfikatory, składnię eksportu lub planuje kolejność. |
+| OD-10 | Konkretne warianty badawcze i szczegóły organizacji pracy modeli w granicach gotowego wyniku. | Model przygotowuje gotowy SQL/CSV. Aplikacja nie generuje go z pośrednich rekordów i nie poprawia danych po cichu. Dokładny kontrakt przekazania plików i organizacja pracy modeli pozostają do ustalenia. |
 | OD-11 | Lista modeli, sprzęt, parametry, szczegółowe definicje pomiarów i sposób wyboru zwycięzcy. | Badania są ręczne, obejmują modele lokalne i płatne oraz porównują wynik całego procesu na tym samym zadaniu. |
-| OD-12 | Konkretny układ ekranów i szczegółowe interakcje użytkownika. | Są projekty, przygotowanie zlecenia, wynik i historia; liczba zakładek i technologia UI nie są wymaganiem. |
+| OD-12 | Konkretny układ ekranów i szczegółowe interakcje użytkownika. | Ustalono lokalną aplikację webową w przeglądarce. Są projekty, przygotowanie zlecenia, wynik i historia; liczba zakładek i framework UI pozostają otwarte. |
 
 Decyzje dotyczące implementacji nie powinny zastępować decyzji o wymaganiach. Przykładowo wybór biblioteki walidacyjnej nie rozstrzyga sam przez się, jakie elementy schematu aplikacja rzeczywiście potwierdza.
 
@@ -502,3 +537,6 @@ Decyzje dotyczące implementacji nie powinny zastępować decyzji o wymaganiach.
 | Lokalne uruchomienie | Q40. |
 | Reakcja na wykryte sprzeczności | Q41. |
 | Potwierdzenie podstawy specyfikacji i zgoda na jej zapisanie | Q42. |
+| Przygotowanie do hostowania, wielu użytkowników i logowania bez wdrażania tych funkcji w MVP | Dodatkowe uzgodnienie podczas projektowania architektury, 20 października 2026. |
+| Lokalny interfejs webowy, gotowy wynik modelu, kolejność walidacji i brak wznawiania | Odpowiedzi na pięć pytań architektonicznych, 20 października 2026. |
+| Rozróżnienie błędów technicznych i naruszeń danych | Potwierdzenie 20 października 2026: błędy techniczne kończą wykonanie, naruszenia danych nadal uruchamiają ograniczone poprawki. |

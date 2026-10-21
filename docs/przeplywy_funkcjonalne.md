@@ -6,6 +6,8 @@
 
 Dokument opisuje zachowanie widoczne dla użytkownika i logiczny przebieg wykonania. Uczestnicy i etapy diagramów **nie oznaczają wybranych mikroserwisów, bibliotek ani technologii**. Układ ekranów pozostaje otwarty.
 
+Uzupełnienie z projektowania architektury: interfejs jest lokalną aplikacją webową, model przygotowuje gotowy SQL/CSV, a przerwanego wykonania nie wznawia się. Szczegóły pokazuje [architektura ogólna](architektura.md). Naruszenia danych uruchamiają ograniczone poprawki; błędy techniczne kończą wykonanie bez automatycznego retry (REQ-032–REQ-037, REQ-069–REQ-070).
+
 ## 1. Przygotowanie projektu
 
 ```mermaid
@@ -73,6 +75,9 @@ flowchart TD
     I -->|"Tak"| J["Wskaż użytecznego kandydata i jego rzeczywiste naruszenia biznesowe"]
     J --> K["Zakończ jako wykonane z raportem naruszeń"]
     I -->|"Nie"| L["Zakończ jako niewykonane z opisem braków i błędów"]
+    B -->|"Błąd techniczny"| M["Przerwane błędem, bez automatycznego ponowienia"]
+    C -->|"Błąd techniczny walidatora"| M
+    H -->|"Błąd techniczny"| M
 ```
 
 ### Zasady interpretacji
@@ -104,7 +109,9 @@ Niedostępność modelu lub inny błąd uniemożliwiający kontynuację nie jest
 | Użytkownik przerywa próbę | Anulowane przez użytkownika. |
 | Błąd operacyjny uniemożliwia kontynuację | Przerwane błędem, ze wskazaniem przyczyny. |
 
-Nie zakłada się natychmiastowego przerwania już obsługiwanego żądania zewnętrznego. Dostępność częściowych danych lub wcześniej użytecznego kandydata po anulowaniu albo błędzie pozostaje otwarta w OD-08. Timeouty i ponowienia komunikacji opisuje OD-07.
+Nie zakłada się natychmiastowego przerwania już obsługiwanego żądania zewnętrznego. Dostępność częściowych danych lub wcześniej użytecznego kandydata po anulowaniu albo błędzie pozostaje otwarta w OD-08. Konkretne timeouty i raportowanie niepełnych danych wywołania opisuje OD-07. Błąd techniczny kończy wykonanie bez automatycznego retry, zmiany wariantu i rundy naprawczej (REQ-070).
+
+Nie ma wznawiania anulowanej, zakończonej błędem lub utraconej próby. Ręczne ponowienie zaczyna nowe wykonanie od początku, bez nadpisywania wcześniejszej historii (REQ-069).
 
 **Powiązanie:** REQ-041–REQ-042, REQ-052; kryterium AC-19.
 
