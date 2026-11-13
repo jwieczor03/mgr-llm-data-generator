@@ -169,6 +169,35 @@ wymaga nowych testów; nie pomijaj go bez sprawdzenia.
   Jeśli operacja zgłosi niejednoznaczny błąd, sprawdź stan przed ponowieniem,
   aby nie tworzyć duplikatów PR.
 
+## Prowadź PR przez review do gotowości do merge
+
+- Otwarcie PR nie kończy pracy nad zmianą. W ramach zleconej obsługi PR analizuj
+  otrzymane review, wprowadzaj poprawki, publikuj je na tej samej gałęzi
+  i odpowiadaj w odpowiednich wątkach. Nie twórz nowego PR dla każdej rundy.
+- Przeczytaj komentarze, kontekst kodu i aktualny diff. Dla każdej uwagi ustal,
+  czy wymaga poprawki, wyjaśnienia czy decyzji. Zasadne uwagi realizuj,
+  dodaj lub dostosuj potrzebne testy i ponownie zweryfikuj zmieniony obszar.
+  W odpowiedzi krótko wskaż rozwiązanie i powiązany commit lub wynik testu.
+- Jeśli nie zgadzasz się z uwagą, nie ignoruj jej ani nie wdrażaj jej bezkrytycznie.
+  Odpowiedz rzeczowo: pokaż argumenty, wymagania lub dowód z kodu i testów,
+  wyjaśnij kompromis i zaproponuj alternatywę. Nie przedstawiaj własnej
+  odpowiedzi jako zgody reviewera. Spór o wymagania rozstrzygaj z użytkownikiem.
+- Nie oznaczaj spornej lub niewdrożonej uwagi jako rozwiązanej. Zamykaj wątki
+  zgodnie z zasadami zespołu i faktycznym rozstrzygnięciem; po poprawkach
+  przekaż PR do ponownego review, jeśli jest potrzebne.
+- Jeśli wystąpią konflikty, rozwiąż je na gałęzi PR, zachowując intencję obu zmian.
+  Nie wybieraj mechanicznie całej jednej strony. Gdy intencje są sprzeczne lub
+  niejasne, zapytaj. Po rozwiązaniu przejrzyj wynikowy diff i uruchom testy
+  obejmujące połączone zachowanie, nie tylko sprawdzenie braku znaczników konfliktu.
+- Przed przekazaniem do merge sprawdź aktualny stan PR: wymagane approve,
+  rozstrzygnięte uwagi blokujące, zaliczone wymagane kontrole CI i brak konfliktów.
+  Po kolejnych commitach sprawdź, czy approve nadal obowiązuje i czy kontrole
+  dotyczą najnowszej wersji. Nie obchodź zabezpieczeń gałęzi.
+- Docelowo PR jest mergowany po spełnieniu tych warunków. Samo approve nie jest
+  zleceniem merge: pozostaw tę operację uprawnionej osobie, chyba że użytkownik
+  wyraźnie zleci ją Tobie. Wtedy zastosuj uzgodnioną metodę i potwierdź faktyczny
+  wynik; nie utożsamiaj stanu „gotowy do merge” ze stanem „zmergowany”.
+
 ## Sprawdź rezultat i przekaż stan
 
 Przed zakończeniem przejrzyj własny diff i porównaj rezultat z uzgodnionymi
@@ -180,6 +209,8 @@ W podsumowaniu zwięźle podaj:
 - co zostało dostarczone i które kryteria spełniono;
 - jakie testy i kontrole rzeczywiście uruchomiono oraz z jakim wynikiem;
 - czego nie zweryfikowano, jakie ryzyka pozostały i czy potrzebna jest decyzja.
+- jeśli praca obejmuje PR: stan review, uwagi lub kontrole blokujące oraz
+  czy PR oczekuje na merge, czy został już zmergowany.
 
 Nie ogłaszaj pełnego zakończenia, jeżeli pozostaje niewykonany uzgodniony zakres
 lub istotna luka w weryfikacji. Nazwij taki stan wprost, bez ukrywania go
