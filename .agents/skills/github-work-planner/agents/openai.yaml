@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team Lead — planowanie projektu"
+  short_description: "Od specyfikacji do story i technicznych zadań dla juniora"
+  default_prompt: "Użyj $github-work-planner jako Team Leada: najpierw przeanalizuj ze mną cały projekt, uzgodnij obszary/story, potem kolejno zadania i podzadania dla junior fullstack developera; dopytuj o niejasności i nie przyjmuj samodzielnych założeń."
