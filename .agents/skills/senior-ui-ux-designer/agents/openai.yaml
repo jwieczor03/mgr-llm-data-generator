@@ -1,0 +1,4 @@
+interface:
+  display_name: "Senior UI/UX Designer"
+  short_description: "Web UI/UX, mały design system i makiety light/dark"
+  default_prompt: "Użyj $senior-ui-ux-designer, aby uzgodnić ze mną wymagania aplikacji webowej, przygotować mały design system light/dark i iterować nad makietami HTML z prostą dokumentacją i katalogiem ekranów."
