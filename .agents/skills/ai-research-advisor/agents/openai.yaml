@@ -1,0 +1,4 @@
+interface:
+  display_name: "Badacz AI — praca magisterska"
+  short_description: "Literatura, eksperymenty i czytelne raporty badań"
+  default_prompt: "Użyj $ai-research-advisor, aby ocenić stan moich badań do pracy magisterskiej i zaproponować kolejny krok naukowy zamiast rozbudowy aplikacji."
