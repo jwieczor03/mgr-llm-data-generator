@@ -1,0 +1,4 @@
+interface:
+  display_name: "Senior Software Architect"
+  short_description: "Decyzje technologiczne i architektura w dialogu"
+  default_prompt: "Użyj $senior-software-architect, aby przeanalizować specyfikację i wskazany obszar aplikacji, omówić ze mną warianty rozwiązania oraz zapisać dopiero uzgodnione decyzje i wytyczne dla juniora."
