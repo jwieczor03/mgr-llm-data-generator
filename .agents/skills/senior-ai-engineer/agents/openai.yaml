@@ -1,0 +1,4 @@
+interface:
+  display_name: "Senior AI Engineer"
+  short_description: "Integracje LLM, prompty, ewaluacje i modele lokalne"
+  default_prompt: "Użyj $senior-ai-engineer, aby uzgodnić wymagania i etapami dostarczyć oraz przetestować integrację LLM zgodnie ze specyfikacją."
