@@ -1,0 +1,4 @@
+interface:
+  display_name: "Senior Code Reviewer"
+  short_description: "Review PR-ów: poprawność, prostota, testy i ryzyka"
+  default_prompt: "Użyj $senior-code-reviewer do review wskazanego PR-a lub lokalnych zmian; wskaż konkretne problemy, ryzyka i najprostsze poprawki, bez modyfikowania kodu."
