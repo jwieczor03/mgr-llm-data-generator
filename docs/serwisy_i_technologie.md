@@ -4,9 +4,71 @@
 
 **Status:** szczegółowa propozycja realizacji wariantu Python/FastAPI + React. Kierunki LLM i przechowywania kontekstu zapisano w [rejestrze ustaleń](ustalenia_architektoniczne.md); nowe nazwy operacji, endpointów, modeli danych i procesów są propozycjami, nie gotowym kodem.
 
+**Decyzja z 14 listopada 2026 — planowanie S1:** Python/FastAPI
+i React/TypeScript zatwierdzono do implementacji MVP. W osobnej odpowiedzi
+użytkownik zatwierdził także trzy osobno uruchamiane serwisy backendowe:
+zarządzanie, generowanie i walidację, a następnie Docker Compose jako
+podstawowy sposób lokalnego uruchamiania backendów i potrzebnych baz.
+Zatwierdzono także komunikację między serwisami przez HTTP z danymi JSON
+i opisem API w OpenAPI; nie obejmuje to sposobu przesyłania plików.
+Podczas dopracowania S1-T1 zatwierdzono Vite oraz npm dla frontendu
+React/TypeScript.
+Zatwierdzono także uv do zarządzania zależnościami i środowiskami backendów
+Python oraz osobny projekt uv dla każdego z trzech serwisów, z własnymi
+deklaracjami zależności, plikiem blokady wersji i środowiskiem wirtualnym.
+Nie stosujemy wspólnego obszaru roboczego uv.
+Bazową linią Pythona dla wszystkich backendów jest zatwierdzone 3.14;
+wydanie poprawkowe przypniemy po przeglądzie i próbie zgodności zależności.
+Zatwierdzono Uvicorn jako serwer każdej z trzech aplikacji FastAPI;
+wersja, wariant instalacji i parametry uruchomienia pozostają otwarte.
+Zatwierdzono pytest do testów automatycznych wszystkich trzech backendów.
+Wersja, dodatkowe biblioteki i wtyczki pozostają otwarte; nie wykonano
+instalacji ani testów aplikacji.
+Zatwierdzono też `GET /health/live` w każdym backendzie: HTTP 200
+i JSON `{"status":"ok"}`, bez wywołań LLM, kontroli baz i magazynów
+oraz ujawniania konfiguracji. Sprawdzenie potwierdza działanie procesu,
+nie gotowość do generowania lub walidacji. Dokładny zakres opisano
+w [kontraktach API](lld/kontrakty_api.md).
+W S1-T1 zatwierdzono niezależny start szkieletów bez działających baz,
+magazynu plików, Ollamy i kluczy dostawców LLM. Health pozostaje dostępny,
+ale nie oznacza gotowości funkcji biznesowych. Nie wprowadzamy atrap
+odpowiedzi biznesowych; wymagania rzeczywistych integracji ustalamy
+w ich zadaniach. Nie wykonano sprawdzenia uruchomienia.
+Bazową linią środowiska narzędziowego frontendu jest zatwierdzone
+Node.js 26 LTS. Dokładne wersje Node.js, npm i bibliotek wymagają
+przypięcia i sprawdzenia zgodności.
+Zatwierdzono dobór i przypięcie dokładnych wersji zaakceptowanych narzędzi
+oraz ich wymaganych zależności przez dewelopera w pierwszym kroku S1-T1,
+po sprawdzeniu oficjalnej dokumentacji oraz zgodności przez instalację
+i testy. Bez zmiany stosu, Pythona 3.14 i Node.js 26 LTS; konflikt
+wymagający zmiany ustaleń wraca do użytkownika przed zmianą.
+Nie obejmuje to nowych opcjonalnych narzędzi. Wersji jeszcze nie wybrano.
+Pozostałe biblioteki, szczegóły konfiguracji i kontrakty nadal
+wymagają uzgodnienia.
+
+**Decyzja z 14 listopada 2026 — S1-T4:** SQLAlchemy i Psycopg
+zatwierdzono do obsługi PostgreSQL aplikacji w `application-api`,
+a Alembic do migracji tej bazy. Nie obejmuje to schematów DDL użytkownika
+ani zatwierdzenia proponowanych tabel. Dokładnych wersji i zgodności
+z Pythonem 3.14 jeszcze nie sprawdzono. Migracje mają być uruchamiane
+automatycznie przy starcie `application-api`, jako osobny etap
+uruchomienia, nie przez health checki ani monitor. Stosujemy przygotowane
+migracje, nie projektujemy zmian struktury automatycznie.
+Migracje mogą być wykonywane tylko w fazie uruchamiania serwisu,
+także po restarcie, nigdy podczas dalszego działania procesu.
+Po błędzie migracji serwis pozostaje w trybie diagnostycznym,
+udostępnia przyczynę bez wartości sekretów i blokuje funkcje wymagające
+bazy. Kolejna próba po błędzie następuje dopiero po restarcie,
+bez samoczynnego ponawiania podczas działania.
+Ochrona przed równoczesnym wykonaniem
+oraz tryb połączeń i transakcji pozostają do ustalenia.
+Nie wykonano instalacji, migracji ani testów.
+
 **Podstawa:** [specyfikacja MVP](specyfikacja_mvp.md), [architektura ogólna](architektura.md), [analiza technologii](analiza_technologii.md) i [granice przyszłego hostowania](przygotowanie_do_hostowania.md).
 
-Nie zmieniamy wymagań przez szczegółowy projekt. Próbny import i cztery etapy walidacji potwierdzono w rozmowie 21 października 2026 i zapisano w specyfikacji v1.4. Szczegóły środowiska, parser, profil eksportu, sposób wykonywania reguł i wybór kandydata nadal podlegają otwartym decyzjom.
+Nie zmieniamy wymagań przez szczegółowy projekt. Próbny import i cztery etapy walidacji potwierdzono w rozmowie 21 października 2026 i zapisano w specyfikacji v1.4. Szczegóły środowiska, parser, profil eksportu i sposób wykonywania reguł nadal podlegają otwartym decyzjom. Wybór kandydata rozstrzygnięto 14 listopada 2026: zwracamy wyłącznie najnowszego użytecznego kandydata zgodnie z REQ-039.
+
+**Aktualizacja do specyfikacji v1.8:** nie przechowujemy archiwum wykonań ani wiadomości. Główny widok to bieżący czat z wyborem projektu i kolejnymi poleceniami (REQ-073). Nowy czat, odświeżenie lub zamknięcie strony i pełne zamknięcie aplikacji kończą dostęp do rozmowy i plików; projekty pozostają. Ostrzeżenie przed odświeżeniem lub zamknięciem strony podlega ograniczeniom przeglądarki (REQ-074–REQ-075 i sekcja 11.1 specyfikacji). Modele i transakcje wymagają uzupełnienia o granicę czatu. Mechanizm zakończenia dostępu i fizyczne sprzątanie pozostają w OD-09.
 
 **Rozwinięcie implementacyjne:** [architektura niskopoziomowa v0.1](lld/README.md) opisuje moduły, interfejsy, pola danych, transakcje, dokładniejsze kontrakty i cykl wykonania. Nazwy stanów z wcześniejszej rozpiski są tam doprecyzowane jako propozycja.
 
@@ -14,8 +76,8 @@ Nie zmieniamy wymagań przez szczegółowy projekt. Próbny import i cztery etap
 
 | Element | Rodzaj | Co implementujemy | Czego używamy |
 | --- | --- | --- | --- |
-| `web` | Aplikacja w przeglądarce, nie serwis domenowy. | Interakcje, formularze, zatwierdzanie, status, historia i odbiór wyniku. | TypeScript, React, Vite, Mantine; proponowany TanStack Query. |
-| `application-api` | Własny serwis zarządzający. | Projekty, schematy, reguły, plan danych, wykonania, kontekst, historia, raport i eksport. | Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Psycopg, HTTPX. |
+| `web` | Aplikacja w przeglądarce, nie serwis domenowy. | Główny widok czatu z wyborem projektu i kolejnymi poleceniami, zatwierdzanie, status i wynik; bez archiwum rozmów. | TypeScript, React, Vite, Mantine; proponowany TanStack Query. |
+| `application-api` | Własny serwis zarządzający. | Projekty, schematy, reguły, plan danych, bieżące wykonanie, kontekst, raport i eksport, bez archiwum. | Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Psycopg, HTTPX. |
 | `generation-service` | Własny serwis modelowy. | Interpretacja wymagań, wariant generowania, prompty, przygotowanie gotowych artefaktów i reakcja na zleconą poprawkę. | Python, FastAPI, Pydantic; LiteLLM SDK za adapterem. |
 | `validation-service` | Własny serwis sprawdzeń. | Walidacja gotowych artefaktów, zgodność z planem, raport naruszeń i obsługa środowiska próbnego. | Proponowane Python, FastAPI, Pydantic, parser SQL, `csv` i Psycopg. |
 | `app-db` | Gotowa baza aplikacji. | Nasz model trwałych danych i migracje. | PostgreSQL; opcjonalnie pgvector po osobnej decyzji. |
@@ -28,10 +90,10 @@ Są **trzy własne serwisy backendowe**, nie siedem mikroserwisów domenowych. M
 ```mermaid
 flowchart LR
     U["Przeglądarka: web"] -->|"Publiczne lokalne API"| A["application-api"]
-    A -->|"Projekty, wersje, wykonania i historia"| D[("app-db: PostgreSQL")]
+    A -->|"Projekty, wersje i stan bieżącej pracy"| D[("app-db: PostgreSQL")]
     A -->|"Jedyny właściciel trwałego magazynu"| F["Artefakty lokalne"]
     A -->|"Interpretacja, generowanie lub poprawka"| G["generation-service"]
-    G -->|"Ślad wywołań i zapis artefaktów: ograniczone API"| A
+    G -->|"Pomiary i zapis bieżących artefaktów: ograniczone API"| A
     G -->|"LlmClient i LiteLLM SDK"| M["Ollama albo API dostawcy"]
     A -->|"Kandydat, wymagania i profil sprawdzeń"| V["validation-service"]
     V -->|"Odczyt wskazanych artefaktów: ograniczone API"| A
@@ -44,21 +106,31 @@ Usługi wewnętrzne nie korzystają z tabel `app-db`. Diagram pokazuje kierunki 
 
 ### 2.1. Funkcje
 
+**Zakres początkowego szkieletu S1-T1 — zatwierdzony 14 listopada 2026:**
+prosty ekran techniczny z nazwą aplikacji i informacją „Szkielet aplikacji”,
+bez czatu, formularzy i logiki biznesowej. Sprawdzenie połączenia z API
+należy do S1-T8. Poniższa lista dotyczy docelowych funkcji MVP,
+nie zakresu szkieletu; docelowy wygląd pozostaje w OD-12.
+
 1. Lista i utworzenie projektu.
 2. Wgranie pełnego DDL oraz podgląd rozpoznanych tabel, relacji i nieobsługiwanych elementów.
 3. Wprowadzenie reguł i wskazówek jakościowych; odczyt proponowanej interpretacji.
-4. Polecenie w języku naturalnym, odpowiedzi na pytania doprecyzowujące.
+4. Główne okno czatu: wybór projektu, polecenie w języku naturalnym, pytania doprecyzowujące i kolejne polecenia w tej samej rozmowie.
 5. Podgląd i zatwierdzenie zakresu, liczebności dla wszystkich potrzebnych tabel, reguł i formatu.
 6. Start, anulowanie i odczyt bieżącego etapu wykonania.
-7. Wynik i raport: kompletność, importowalność, reguły biznesowe oraz pomiary jako odrębne informacje.
-8. Historia kandydatów i wiadomości, pobranie dostępnej paczki i raportu.
-9. Ręczne nowe wykonanie dawnych wymagań; nie przycisk wznowienia starego procesu.
+7. Wynik i raport: kompletność, importowalność, obowiązujące relacje, dodatkowe reguły biznesowe oraz pomiary jako odrębne informacje.
+8. Pobranie dostępnej paczki i raportu w bieżącym czacie; bez archiwum dawnych rozmów.
+9. Nowe wykonanie przygotowanego zlecenia od początku po anulowaniu lub awarii; bez wyboru dawnej próby z archiwum.
+10. Nowy czat, odświeżenie lub zamknięcie strony i pełne zamknięcie aplikacji: koniec dostępu do rozmowy i plików; po powrocie nowy czat, zapisane projekty pozostają.
+11. Ostrzeżenie przed odświeżeniem lub zamknięciem strony z danymi, z możliwością pozostania bez utraty rozmowy. Nie wybieramy własnego tekstu standardowego okna ani nie gwarantujemy go przy wymuszonym zamknięciu (sekcja 11.1 specyfikacji).
+12. Po nieudanej zmianie i wyczerpaniu napraw: komunikat, poprzednia sprawdzona paczka z jej raportem i ręczna akcja „Podejmij kolejne 3 próby”, jednorazowa dla danej prośby (REQ-078–REQ-079). Jeśli dodatkowa seria również nie da użytecznej poprawionej paczki, kończymy naprawy i nie pokazujemy ponownie przycisku; poprzednia sprawdzona paczka z jej raportem pozostaje dostępna. Po nieudanym pierwszym generowaniu bez użytecznej paczki ta akcja nie jest dostępna (AC-47).
 
-Liczba ekranów i układ formularzy pozostają w OD-12. Powyżej opisano funkcje, nie zatwierdzony projekt UI.
+Czat jako główny widok jest uzgodniony. Dokładny układ formularzy, zarządzanie projektami i pozostała prezentacja kolejnych wyników pozostają w OD-12. Przy prośbie o zmianę danych LLM otrzymuje poprzednią paczkę jako kontekst i nowe polecenie, a poprawiona paczka podlega nowej walidacji (REQ-076). Każda nowa prośba ma własny limit napraw zgodnie z REQ-033–REQ-034. Dodatkowa seria z REQ-079 ma do 3 rund, bez dodatkowego pierwszego kandydata poza limitem. LLM otrzymuje ostatniego nieudanego kandydata i wykryte w nim błędy, nie poprzednią sprawdzoną paczkę. Techniczne przypisanie prośby i serii do wykonania oraz liczników i kontrakt kontekstu pozostają w OD-10; nie jest to wznowienie zakończonego procesu ani automatyczne retry po awarii.
 
 ### 2.2. Narzędzia i własny kod
 
-- **React + TypeScript + Vite** — proponowany interfejs przeglądarkowy i budowanie zasobów; uzasadnienie w analizie technologii.
+- **React + TypeScript + Vite** — zatwierdzony zestaw frontendu; React służy do budowy interfejsu, Vite do uruchamiania podczas developmentu i budowania zasobów. Konkretne wersje wymagają ustalenia i sprawdzenia.
+- **npm** — zatwierdzone zarządzanie pakietami frontendu i uruchamianie poleceń projektu; nie zastępuje Reacta ani Vite.
 - **Mantine** — gotowe kontrolki formularzy, okien i list zamiast budowania biblioteki UI [T1].
 - **TanStack Query** — proponowany odczyt danych serwera i odpytywanie o status. Wyłączamy automatyczne retry; błąd odczytu nie uruchamia ani nie kończy wykonania [T2].
 - **Klient API na podstawie OpenAPI** — kierunek, konkretnego generatora jeszcze nie wybieramy.
@@ -70,14 +142,15 @@ Nasze są ekrany, reguły widoczności, interakcje i prezentacja. Backend nadal 
 
 - UI rozmawia wyłącznie z `application-api`, nie z bazą, Ollamą i walidatorem.
 - Nie przechowuje kluczy dostawców LLM ani ścieżek plików hosta jako źródła prawdy.
-- Odświeżenie strony odtwarza widok z trwałego statusu. Nie ponawia generowania.
+- Odświeżenie strony nie ponawia generowania i nie odtwarza starego czatu ani plików. Rezygnacja z odświeżenia w ostrzeżeniu zachowuje dane. Techniczny mechanizm zakończenia dostępu wymaga OD-09; nie wystarczy założyć niezawodnego żądania sieciowego przy zamykaniu.
+- Nowy czat nie odzyskuje odpowiedzi i plików starej rozmowy przez zachowane identyfikatory lub pamięć podręczną. Powiązanie rozmowy z komendami i plikami wymaga uzupełnienia projektu API; nie wybrano jeszcze technicznego mechanizmu.
 - Identyfikator komendy pozwala rozpoznać ponowne dostarczenie tej samej akcji startu. Świadome ręczne nowe wykonanie ma nowy identyfikator.
 
 ## 3. `application-api` — zarządzanie i sterowanie
 
 ### 3.1. Odpowiedzialność
 
-To właściciel trwałej prawdy o projekcie i wykonaniu. Zawiera odrębne moduły, ale nie osobne mikroserwisy projektów, historii, raportów i plików.
+To właściciel danych projektu i stanu bieżącego wykonania. Zawiera odrębne moduły, ale nie osobne mikroserwisy raportów i plików. Historia wykonań jest poza MVP (REQ-072).
 
 | Moduł | Funkcje i proponowane operacje |
 | --- | --- |
@@ -86,10 +159,10 @@ To właściciel trwałej prawdy o projekcie i wykonaniu. Zawiera odrębne moduł
 | Reguły | `propose_rule_interpretation`, `approve_rule_interpretation`; rozróżnienie reguł sprawdzalnych, nierozstrzygnięć i wskazówek jakościowych. |
 | Zlecenia | `prepare_order`, `answer_clarification`, `approve_data_plan`; wymagane tabele i liczebności, format, konflikty i blokady. |
 | Kontekst | `build_context`; dokładne definicje potrzebnych tabel, relacje i reguły z przypiętych wersji, kontrola budżetu. |
-| Wykonania | `start_run`, `get_run`, `cancel_run`, `create_new_run_from_history`; migawka, wariant, operacje i trwałe przejścia stanu. |
-| Sterowanie | `execute_run`, `request_correction`, `finalize_run`; kolejność etapów i jeden globalny budżet poprawek. |
+| Wykonania | `start_run`, `get_run`, `cancel_run`; migawka, wariant, operacje i przejścia bieżącego stanu. Odtwarzanie z historii jest poza MVP. |
+| Sterowanie | `execute_run`, `request_correction`, `finalize_run`; kolejność etapów i jeden wspólny budżet poprawek dla danej prośby. Nowa prośba użytkownika o zmianę danych ma własny limit (REQ-034); powiązanie z wykonaniem nadal wymaga OD-10. |
 | Kandydaci | `register_candidate`, `record_validation`, `select_candidate`; niezmienne wersje, powiązanie z raportem i ochrona wcześniejszego użytecznego wyniku. |
-| Historia | `append_trace`, `get_run_history`; faktyczne wywołania, role, ustawienia, dostępne pomiary i jawne luki po awarii. |
+| Pomiary | Dostępne liczniki, ustawienia i błędy do raportu bieżącego wykonania, bez archiwum wiadomości. Uproszczony kontrakt wymaga OD-05 i OD-07. |
 | Artefakty | `store_artifact`, `open_authorized_artifact`, `build_export`; integralność, pakowanie bez modyfikowania SQL/CSV. |
 | Raport | `build_run_report`; wynik procesu i naruszenia, bez jednej zbiorczej oceny jakości. |
 
@@ -98,8 +171,8 @@ Jeśli przygotowanie planu lub interpretacji reguł wymaga modelu, backend zleca
 ### 3.2. Technologie i wzorce
 
 - **Python + FastAPI + Pydantic** — API i kontrakty; OpenAPI oraz wstrzykiwanie zależności są udokumentowane przez FastAPI [T3].
-- **SQLAlchemy + Psycopg** — adapter repozytoriów PostgreSQL. ORM dotyczy naszych tabel, nie dynamicznych schematów danych użytkownika [T4].
-- **Alembic** — migracje tylko schematu aplikacji [T5].
+- **SQLAlchemy + Psycopg** — zatwierdzone dla bazy aplikacji w `application-api`. ORM dotyczy naszych tabel, nie dynamicznych schematów danych użytkownika; szczegółowe granice repozytoriów pozostają propozycją [T4].
+- **Alembic** — zatwierdzone migracje tylko schematu aplikacji, uruchamiane automatycznie wyłącznie w fazie startu `application-api`, poza health checkami i monitoringiem. Błąd pozostawia serwis w trybie diagnostycznym z blokadą funkcji wymagających bazy; ponowienie wymaga restartu. Ochrona przed równoczesnym uruchomieniem pozostaje do uzgodnienia [T5].
 - **HTTPX** — klient do generatora i walidatora, z jawnymi timeoutami i bez automatycznych ponowień [T6].
 - **Repository + Unit of Work** — proponowane granice operacji zapisu i transakcji; nie uniwersalna warstwa CRUD.
 - **Ports & Adapters** — logika przypadków użycia nie importuje klas SQLAlchemy, LiteLLM ani parsera.
@@ -113,14 +186,14 @@ Proponujemy port `ExecutionRunner` z pojedynczym, ograniczonym wykonawcą na MVP
 1. `start_run` sprawdza zatwierdzenie planu, dostęp i dostępność miejsca na wykonanie.
 2. W transakcji zapisuje migawkę, faktyczny wariant, identyfikator komendy i wykonania.
 3. Zleca pracę wykonawcy i zwraca `202` z `run_id`, bez oczekiwania przeglądarki na wynik modelu.
-4. Błąd uruchomienia po zapisie zostawia historię zakończoną błędem; nie znika jako niedoszłe zadanie.
+4. Błąd uruchomienia po zapisie daje bieżący status błędu; nie jest zaliczoną generacją. Nie wymaga to wpisu w archiwum.
 5. Runner wywołuje generowanie i walidację, zapisuje wyniki, decyduje o poprawkach i zakończeniu.
 
 Do prototypu proponujemy zadania `asyncio` zarządzane cyklem życia aplikacji, z rejestrem aktywnych operacji, limitami i jawnym sprzątaniem [T7]. Nie traktujemy pojedynczego `create_task()` ani FastAPI `BackgroundTasks` jako kompletnego systemu zadań [T8]. Blokujące operacje nie mogą blokować obsługi statusu i anulowania.
 
 Bazowe ograniczenie wdrożeniowe to **jeden proces wykonawczy zarządzania i najwyżej jedno aktywne wykonanie**. Przy zajętości proponujemy jawną odmowę startu, a nie niewidoczną kolejkę. Nie uruchamiamy wielu replik z niezależnymi runnerami. Gotowy runner, np. omawiany w analizie Procrastinate, pozostaje alternatywą do próby, nie dodatkową zależnością tego projektu.
 
-Utrata procesu runnera kończy możliwość kontynuacji. Przy restarcie uzgadniamy pozostawiony status i oznaczamy przerwanie, ale nie odtwarzamy kolejnych kroków. Przed nowym zadaniem sprawdzamy także brak pozostawionej aktywnej operacji usług pomocniczych; anulujemy ją lub blokujemy nowy start.
+Utrata procesu runnera kończy możliwość kontynuacji. Proponowane uzgodnienie pozostawionego stanu po restarcie służy porządkowaniu pracy, nie przywracaniu poprzedniej rozmowy i plików po pełnym zamknięciu aplikacji. Nie odtwarzamy kolejnych kroków. Przed nowym zadaniem sprawdzamy także brak pozostawionej aktywnej operacji usług pomocniczych; anulujemy ją lub blokujemy nowy start.
 
 ### 3.4. Własność danych
 
@@ -136,14 +209,14 @@ Proponowane logiczne encje, nie gotowy schemat migracji:
 | `Operation` | Konkretne zlecenie generatora lub walidatora, jego termin i uprawniony zakres. Przygotowanie ma referencję do projektu/rewizji zlecenia, a generowanie i walidacja również do wykonania. |
 | `Candidate` | Manifest artefaktów, runda, wersja i hashe; bez nadpisywania poprzednika. |
 | `ValidationReport` | Metoda, profil możliwości, sprawdzenia i identyfikacja dokładnego kandydata. |
-| `ModelCall` / `TraceEvent` | Wiadomości, role, faktyczne parametry, wynik albo błąd i dostępne pomiary. |
+| Pomiary wywołań | Dostępne parametry i pomiary do bieżącego raportu. Archiwum pełnych wiadomości i `TraceEvent` jest poza MVP. |
 | `Artifact` | Typ, właściciel wynikający z projektu, rozmiar, hash i logiczny klucz magazynu. |
 
 Proponujemy rozdzielić **cykl życia** (`ACTIVE`, `FINISHED`, `FAILED_TECHNICALLY`, `CANCELLED`) od **fazy** (`GENERATING`, `VALIDATING`, `CORRECTING`) i **oceny wyniku**. Nazwy są robocze. Samo `FINISHED` nie znaczy, że dane są kompletne i importowalne. Żądanie anulowania jest osobną trwałą informacją, zanim zostanie rozstrzygnięte zakończenie.
 
 ### 3.5. Najważniejsze testy
 
-- Zmiana projektu nie modyfikuje migawki dawnego wykonania.
+- Zmiana projektu nie modyfikuje wymagań rozpoczętego wcześniej, nadal obsługiwanego wykonania.
 - Dwukrotne dostarczenie tej samej komendy nie wywołuje modelu dwukrotnie.
 - Limit poprawek jest globalny; wiele wywołań w rundzie go nie resetuje.
 - Błąd techniczny nie uruchamia rundy poprawki ani innego modelu.
@@ -164,6 +237,8 @@ Proponujemy rozdzielić **cykl życia** (`ACTIVE`, `FINISHED`, `FAILED_TECHNICAL
 | `cancel_operation` | Identyfikator uprawnionej aktywnej operacji. | Potwierdzenie przyjęcia lokalnego zatrzymania; nie gwarancja cofnięcia obliczeń u dostawcy. |
 | `get_capabilities` | Wybrana konfiguracja wariantu. | Jawne możliwości i ograniczenia, bez sekretów. |
 
+**Uzupełnienie do specyfikacji v1.9:** powyższe `correct_candidate` oznacza automatyczną poprawkę naruszeń przy niezmiennych wymaganiach. Prośba użytkownika o zmianę danych (REQ-076) wymaga przekazania poprzedniej paczki i nowego polecenia; nie utożsamiamy jej z tą operacją. Dopasowanie kontraktu i strategii, w tym obsługa pojemności kontekstu, pozostaje do zaprojektowania w OD-10.
+
 ### 4.2. Narzędzia i własny kod
 
 - **Python + FastAPI + Pydantic** — granica HTTP i kontrakty [T3].
@@ -171,7 +246,7 @@ Proponujemy rozdzielić **cykl życia** (`ACTIVE`, `FINISHED`, `FAILED_TECHNICAL
 - **Ollama** — preferowane środowisko modeli lokalnych. Płatne modele pozostają za tym samym portem; lista modeli nie jest wybrana.
 - **GenerationStrategy** — nasza strategia organizacji pracy: pierwszy wariant możliwie prosty, inne warianty dopiero do badań.
 - **LangGraph** — wyłącznie opcjonalny komponent konkretnej strategii, nie domyślny silnik całej aplikacji.
-- **HTTPX** — ograniczony dostęp do API artefaktów i historii backendu [T6].
+- **HTTPX** — ograniczony dostęp do API artefaktów i pomiarów bieżącej pracy [T6].
 
 Nasze są prompty, podział kontekstu i ról, wyodrębnienie zadeklarowanych plików, mapowanie możliwości i błędów oraz powiązanie wywołań z rundą. Nie piszemy inferencji ani klientów każdego API od zera.
 
@@ -183,7 +258,7 @@ Warunki:
 
 1. Wyłączone retry wszystkich warstw, fallbacki, cache odpowiedzi i ciche skracanie kontekstu.
 2. Brak cichego usuwania nieobsługiwanych parametrów.
-3. Rejestr wiadomości po rzeczywistym mapowaniu do dostawcy, nie tylko przed wywołaniem LiteLLM. Callbacki są mechanizmem do oceny, nie dowodem kompletności historii [T10].
+3. Dostępne pomiary muszą odpowiadać rzeczywistym wywołaniom. Callbacki są mechanizmem do oceny [T10]; nie wdrażamy archiwum pełnych wiadomości.
 4. Klucze i nagłówki uwierzytelniające nie trafiają do artefaktów ani śladu.
 5. Zakończenie przez limit odpowiedzi nie jest traktowane jako dowód kompletności.
 6. Ustawienia i dane wykonania nie są zmiennymi globalnymi „aktualnej rozmowy”.
@@ -191,14 +266,14 @@ Warunki:
 
 Nie deklarujemy, że dowolnego dostawcę podłączymy wyłącznie zmianą nazwy modelu. Potrzebne są testy zgodności możliwości i śladu.
 
-### 4.4. Dane, historia i ograniczenia
+### 4.4. Dane robocze, pomiary i ograniczenia
 
 - Serwis nie posiada trwałej bazy projektów ani historii.
 - Operacje interpretacji poprzedzają `run_id`; ich ślad przypisujemy do projektu i rewizji zlecenia. Zatwierdzona migawka może wskazywać użyte przygotowanie, bez liczenia jednego wywołania jako nowego kosztu w każdym ręcznym ponowieniu.
 - Rejestr aktywnych operacji służy anulowaniu i ochronie przed duplikatem, nie odtwarzaniu pracy po restarcie.
-- Przed wywołaniem zgłasza próbę przez port `TraceSink`, po nim zapisuje dostępny wynik lub błąd. Proponowana implementacja to ograniczone wewnętrzne API backendu.
-- Ślad jest utrwalany przy kolejnych wywołaniach, nie dopiero po całej rundzie. Awaria między odpowiedzią dostawcy a trwałym zapisem pozostaje jawną luką, nie fikcyjnym kompletnym logiem.
-- Jeśli nie można utrwalić wymaganego śladu, operacja nie kontynuuje kolejnych wywołań w ukryciu.
+- Dostarcza dostępne pomiary i błędy do bieżącego raportu. Dawny `TraceSink` z archiwum wiadomości nie należy do MVP; uproszczony kontrakt wymaga OD-05 i OD-07.
+- Brak pomiarów po awarii pozostaje jawny; nie dopisujemy fikcyjnego kompletnego logu.
+- Awaria mechanizmu wymaganego do obsługi bieżącego wykonania kończy pracę, ale nie wymagamy zapisu archiwum jako warunku każdego wywołania.
 - Gotowe pliki trafiają do backendu przez `ArtifactWriter`, z identyfikacją operacji i kontrolą rozmiaru. Generator nie montuje trwałego katalogu historii.
 - Jeśli treść poprawnie odebranej odpowiedzi modelu nie pozwala wyodrębnić wymaganych plików, zachowujemy ją i zgłaszamy naruszenie formatu kandydata. Nie nazywamy takiej treści awarią SDK i nie naprawiamy jej po cichu.
 - Nie podejmuje decyzji o globalnym limicie, sukcesie zadania ani wyborze ostatecznego kandydata.
@@ -254,6 +329,8 @@ Każde sprawdzenie zwraca roboczo: `check_id`, `stage`, `status`, `code`, zakres
 
 Raport ma `run_id`, `operation_id`, `candidate_id`, hashe, wersję walidatora i profil możliwości. Validator nie zwraca tylko jednego `valid: true`.
 
+Uzgodnione 14 listopada 2026: relacje zatwierdzone poza DDL są obowiązkowym warunkiem wykonania zadania i wymagają osobnego sprawdzenia po imporcie. Naruszenie lub brak dowodu blokuje kwalifikację kandydata mimo udanego importu; nie zmieniamy przy tym oryginalnego DDL ani wyniku importu (REQ-012, REQ-027, AC-34).
+
 Testy obejmują osobno: błędną składnię, typ, klucz, brak referencji, niekompletność, naruszenie dodatkowej reguły, niewykonane sprawdzenie, timeout i awarię. Sprawdzamy, że identyczny kandydat nie został zmodyfikowany podczas walidacji.
 
 ## 6. Moduł kontekstu — bez dodatkowego serwisu RAG
@@ -278,7 +355,7 @@ Wybór tabel do kontekstu nie jest automatycznym zatwierdzeniem generowania dla 
 
 ### 7.1. `app-db`
 
-Przechowuje projekty, wersje, zatwierdzone wymagania, wykonania, metadane i historię. Duże treści mogą być artefaktami, o ile historia ma trwałe i jednoznaczne odniesienia.
+Przechowuje projekty i schematy. Techniczny zapis wymagań i stanu bieżącej pracy pozostaje propozycją do doprecyzowania z OD-09, nie archiwum zakończonych wykonań. Duże treści mogą być roboczymi artefaktami o jednoznacznych referencjach.
 
 Jedyny serwis z poświadczeniami aplikacyjnej bazy to `application-api`; osobna rola migracji może działać wyłącznie przy przygotowaniu i aktualizacji środowiska. Generator i walidator korzystają z kontraktów backendu, nie współdzielonego ORM.
 
@@ -286,14 +363,14 @@ Jedyny serwis z poświadczeniami aplikacyjnej bazy to `application-api`; osobna 
 
 Port `ArtifactStore` ukrywa katalog hosta. W bazowym wariancie proponujemy `LocalArtifactStore`.
 
-- Przechowuje DDL, wiadomości, gotowe pliki kandydatów, raporty i paczki.
+- Przechowuje DDL oraz potrzebne bieżącej pracy pliki kandydatów, raport i paczkę. Nie jest archiwum dawnych wyników i pełnych wiadomości.
 - Backend wyznacza klucze plików; nazwy od modelu nie są zaufanymi ścieżkami.
 - Metadane obejmują hash, rozmiar i stan rejestracji. Zapis do pliku i transakcja bazy nie są jedną transakcją.
 - Proponujemy zapis tymczasowy, ukończenie pliku i dopiero publikację metadanych; uszkodzony zapis nie staje się artefaktem gotowym do pobrania.
-- Osierocone pliki techniczne są uzgadniane; retencja historii i usuwanie projektów nadal podlegają OD-09.
+- Osierocone pliki techniczne są uzgadniane; czas życia danych roboczych i usuwanie projektów nadal podlegają OD-09.
 - `zipfile` służy do opakowania wyników, nie przepisania ich treści [T17].
 - Nie eksportujemy danych przez ponowny odczyt tabel walidacyjnych i serializację: użytkownik otrzymuje sprawdzone artefakty modelu.
-- Dostęp do danych po anulowaniu i awarii pozostaje OD-08; przechowanie pliku nie jest automatyczną zgodą na udostępnienie go jako poprawnego wyniku.
+- W nadal dostępnym czacie wcześniej zapisany użyteczny kandydat i jego raport są dostępne do pobrania po anulowaniu i awarii bez zmiany statusu wykonania (REQ-047, AC-35). Po zdarzeniach z REQ-074 stary czat i jego pliki nie są dostępne. Dla częściowych lub niesprawdzonych artefaktów dostępność pozostaje OD-08; samo przechowanie pliku nie jest dowodem poprawności.
 
 ### 7.3. `validation-db`
 
@@ -309,7 +386,7 @@ Wariant tylko z zewnętrznym API nie wymaga działającej Ollamy. Nie uruchamiam
 
 ### 8.1. Reguły
 
-- HTTP + JSON i wersjonowane OpenAPI; pliki przesyłane binarnie z osobnym manifestem.
+- Zatwierdzono HTTP + JSON i opis API w OpenAPI między serwisami. Wersjonowanie kontraktów i binarne przesyłanie plików z osobnym manifestem pozostają propozycją.
 - Przeglądarka korzysta z krótkich komend i odczytu statusu; nie utrzymuje połączenia przez cały czas generowania.
 - W proponowanym prostym wariancie wewnętrzna operacja generowania lub walidacji może być długim żądaniem HTTP runnera. Wymaga osobnych timeoutów oraz równolegle dostępnego anulowania.
 - Nie tworzymy trzech niezależnych trwałych kolejek i nie ukrywamy awarii automatycznym redelivery.
@@ -317,6 +394,14 @@ Wariant tylko z zewnętrznym API nie wymaga działającej Ollamy. Nie uruchamiam
 - Serwisy nie przyjmują dowolnych adresów plików lub callbacków z promptu. Adres backendu i uprawnienia transferu pochodzą z zaufanej konfiguracji.
 
 ### 8.2. Proponowane API użytkownika
+
+**Wyjątek — zakres zatwierdzony w S2-T1, 14 listopada 2026:**
+`POST /api/v1/projects` z `name` i opcjonalnym `description` zwraca `201`,
+`GET /api/v1/projects` i `GET /api/v1/projects/{project_id}` zwracają `200`.
+Zatwierdzono `422` dla niepoprawnych pól, `409` dla zajętej nazwy
+i `404` dla nieistniejącego projektu. Dokładne odpowiedzi nadal wymagają
+uzgodnienia w [kontraktach API](lld/kontrakty_api.md).
+Pozostałe operacje poniżej pozostają propozycjami.
 
 | Metoda i ścieżka | Funkcja |
 | --- | --- |
@@ -329,11 +414,8 @@ Wariant tylko z zewnętrznym API nie wymaga działającej Ollamy. Nie uruchamiam
 | `POST /api/v1/orders/{id}/clarifications` | Odpowiedź na pytanie doprecyzowujące. |
 | `POST /api/v1/orders/{id}/approve` | Zatwierdzenie konkretnej rewizji planu. |
 | `POST /api/v1/orders/{id}/runs` | Nowe wykonanie zatwierdzonego zlecenia. |
-| `GET /api/v1/runs/{id}` | Trwały status, faza i dostępny wynik. |
+| `GET /api/v1/runs/{id}` | Bieżący status, faza i dostępny wynik; bez gwarancji archiwum. |
 | `POST /api/v1/runs/{id}/cancel` | Żądanie zatrzymania. |
-| `POST /api/v1/runs/{id}/new-run` | Nowe wykonanie dawnych wymagań z aktualnym wariantem. |
-| `GET /api/v1/projects/{id}/runs` | Historia wykonań projektu. |
-| `GET /api/v1/runs/{id}/history` | Kandydaci, sprawdzenia i ślad wywołań. |
 | `GET /api/v1/runs/{id}/report` | Dostępny raport wykonania. |
 | `GET /api/v1/runs/{id}/export` | Dostępna paczka przypisana do wybranego kandydata. |
 
@@ -360,7 +442,7 @@ Generator i walidator uwierzytelniają się jako usługi przez zaufaną lokalną
 | `GenerationClient`, `ValidationClient` | Backend. | Implementację i transport operacji usług. |
 | `ExecutionRunner` | Backend. | Sposób wykonywania pracy i późniejszy przydział zadań. |
 | `GenerationStrategy`, `LlmClient` | Generator. | Organizację wariantu i komunikację z dostawcami. |
-| `TraceSink`, `ArtifactReader`, `ArtifactWriter` | Usługi pomocnicze. | Sposób przekazania śladu i plików bez połączenia z `app-db`. |
+| Pomiary, `ArtifactReader`, `ArtifactWriter` | Usługi pomocnicze. | Przekazanie bieżących pomiarów i plików bez połączenia z `app-db`. Dawny `TraceSink` z pełnym archiwum jest poza MVP. |
 | `ValidationEngine`, `BusinessRuleEvaluator`, `ValidationEnvironment` | Walidator. | Mechanizm sprawdzeń, reguł i przygotowania środowiska. |
 | `ActorContextProvider`, `AccessPolicy` | Backend. | Lokalnego właściciela na przyszłe uwierzytelnianie i autoryzację. |
 
@@ -378,44 +460,134 @@ Nie współdzielimy modeli ORM ani pełnego modelu domenowego jako obowiązkowej
 6. Generator rejestruje wywołania i gotowe treści przez ograniczone API backendu. Powstaje niezmienny kandydat.
 7. Backend zleca walidatorowi sprawdzenie tego kandydata; walidator odczytuje tylko wskazane pliki.
 8. Backend zapisuje raport. Jeśli wykryto naruszenia i pozostał globalny budżet, zleca poprawkę jako następną rundę.
-9. Po zakończeniu wybiera kandydata według ustalonej polityki. Jeśli kilka wyników jest użytecznych, szczegóły polityki pozostają OD-03; nie dopisujemy rankingu.
+9. Po zakończeniu wybiera wyłącznie najnowszego użytecznego kandydata spełniającego REQ-027, niezależnie od liczby lub wag dodatkowych naruszeń biznesowych (REQ-039, AC-36; OD-03 rozstrzygnięte).
 10. Eksport opakowuje dokładnie sprawdzone pliki i raport. Ostateczny stan nie jest deklaracją realizmu.
 
-Każdy techniczny błąd kończy przebieg bez ponawiania kroku. Dostępność wcześniejszego wyniku po takim przerwaniu rozstrzyga OD-08, nie sama obecność pliku.
+Każdy techniczny błąd kończy przebieg bez ponawiania kroku. Wcześniej zapisany użyteczny kandydat z raportem pozostaje dostępny zgodnie z REQ-047, ale jego pobranie nie zmienia statusu przerwanego wykonania. Nie wystarcza sama obecność pliku bez dowodów kwalifikacji. Dostępność pozostałych artefaktów nadal wymaga OD-08.
 
 ## 10. Awarie, anulowanie i późniejsze skalowanie
 
 | Sytuacja | Zachowanie |
 | --- | --- |
 | Błędny SQL/CSV od działającego modelu | Kandydat z naruszeniami; walidacja i poprawka w budżecie. |
-| Timeout lub awaria modelu | Błąd techniczny; bez retry i innego modelu. Dostępne dane próby pozostają w historii. |
+| Timeout lub awaria modelu | Błąd techniczny; bez retry i innego modelu. Dostępne informacje o błędzie trafiają do bieżącego raportu, bez archiwum prób. |
 | Timeout lub awaria walidatora | Błąd techniczny, nie negatywna ocena danych. |
-| Błąd zapisu historii/artefaktu | Nie kontynuujemy w ukryciu; brak danych po awarii jest jawny. Błąd niedostępnego magazynu może uniemożliwić natychmiastowe zapisanie statusu i wymaga uzgodnienia po odzyskaniu dostępu. |
+| Błąd zapisu wymaganego stanu roboczego/artefaktu | Nie kontynuujemy w ukryciu; brak danych po awarii jest jawny. Błąd niedostępnego magazynu może uniemożliwić natychmiastowe zapisanie statusu i wymaga uzgodnienia po odzyskaniu dostępu. |
 | Żądanie anulowania | Backend trwale blokuje przejście do kolejnych etapów i sygnalizuje aktywnej operacji zatrzymanie. Dokładny moment zakończenia pozostaje OD-08. |
 | Odpowiedź po timeoutcie/anulowaniu | Może uzupełnić ślad diagnostyczny, ale nie uruchamia następnego etapu i nie zmienia wybranego wyniku. |
 | Utrata procesu usługi | Pozostawione wykonanie zostaje rozpoznane jako przerwane; bez odtwarzania operacji i automatycznego wznowienia. |
 | Niepewny wynik komendy HTTP | Identyfikatory i odczyt statusu służą rozpoznaniu sytuacji; nie zakładamy „exactly once” i nie wysyłamy automatycznie drugiej generacji. |
 
-Proponujemy warunkowe aktualizacje statusu i identyfikator aktualnie uprawnionej operacji, żeby stara odpowiedź nie nadpisała zakończenia. Deduplikacja identycznego zdarzenia historii nie jest ponownym wywołaniem modelu.
+Proponujemy warunkowe aktualizacje statusu i identyfikator aktualnie uprawnionej operacji, żeby stara odpowiedź nie nadpisała zakończenia. Deduplikacja pomiaru lub komendy bieżącej pracy nie jest ponownym wywołaniem modelu.
 
 Późniejsze skalowanie wymieni runner i politykę przydziału, doda rzeczywistą tożsamość, limity i testy współbieżności. Nie obiecujemy, że wystarczy zwiększyć liczbę replik obecnego lokalnego procesu.
 
 ## 11. Lokalne uruchomienie i granice bezpieczeństwa
 
-Proponowany Compose opisuje `application-api`, `generation-service`, `validation-service`, `app-db` i warunkowy `validation-db`. Compose służy do złożenia zależności, a nie zastępuje systemu zadań i bezpieczeństwa SQL [T19].
+Docker Compose zatwierdzono jako podstawowy sposób lokalnego uruchamiania backendów i potrzebnych baz. Proponowana konfiguracja opisuje `application-api`, `generation-service`, `validation-service`, `app-db` i warunkowy `validation-db`; jej szczegóły nadal wymagają uzgodnienia, w tym OD-02. Compose służy do złożenia zależności, a nie zastępuje systemu zadań i bezpieczeństwa SQL [T19].
 
-- Zbudowane zasoby `web` mogą być podawane przez backend; osobny serwer Vite jest potrzebny podczas pracy deweloperskiej, nie jako obowiązkowy proces aplikacji.
+**Zatwierdzone 14 listopada 2026 — bezpośrednie uruchomienie deweloperskie
+poza Compose:** wszystkie serwery na `127.0.0.1`, z domyślnymi portami
+8000 dla `application-api`, 8001 dla `generation-service`, 8002 dla
+`validation-service` i 5173 dla Vite. Nie określa to sieci ani publikacji
+portów kontenerów oraz konfiguracji przekazywania żądań przez Vite.
+Uruchomienia nie sprawdzono.
+
+- Zatwierdzono 14 listopada 2026: podczas zwykłego lokalnego korzystania `application-api` udostępnia zbudowane zasoby `web` i API pod jednym adresem. Frontend od `/`, publiczne operacje biznesowe pod `/api/v1`, osobna trasa techniczna `/health/live`. Osobny serwer Vite służy tylko do pracy deweloperskiej; nie dodajemy osobnego serwera frontendu do podstawowego sposobu korzystania z aplikacji. Docelowa nawigacja i konfiguracja Compose pozostają do ustalenia; minimalny routing szkieletu opisano poniżej; adresy bezpośredniego uruchomienia deweloperskiego opisano powyżej, a uzgodnione proxy Vite poniżej.
 - Publiczny lokalny punkt wejścia wiążemy z loopbackiem. Generator, walidator i bazy nie mają domyślnie portów dostępnych z zewnątrz.
 - Sieć aplikacji i środowiska walidacji rozdzielamy: walidator ma dostęp do własnej bazy i ograniczonego API plików, nie `app-db`.
 - Tylko generator potrzebuje połączenia do dopuszczonych API LLM. Adresy i sekrety pochodzą z konfiguracji, nie z treści od modelu.
 - Walidacyjny PostgreSQL nie ma dostępu do bazy aplikacji, danych hosta ani zewnętrznych usług. Dokładne ograniczenia sieci i zasobów wymagają testu wdrożenia.
-- Trwały wolumen historii i artefaktów jest przypisany backendowi. Utrata wolumenu nie jest traktowana jak zwykły restart procesu.
+- Magazyn projektów i artefaktów jest przypisany backendowi. Nie tworzymy wolumenu archiwum wykonań. Zdarzenia z REQ-074, także odświeżenie i zamknięcie strony, kończą dostęp do rozmowy i plików. Mechanizm zakończenia dostępu i fizyczne sprzątanie wymagają OD-09; brak dostępnego pliku nie może być maskowany pustym wynikiem.
 - Natywna Ollama na macOS jest zależnością poza Compose; adres dostępu z kontenera ustalimy i sprawdzimy w konfiguracji danego środowiska.
 - Wersje przypinamy po próbie zgodności; bez ruchomych obrazów `latest`.
 
 Wariant bez logowania nie jest konfiguracją gotową do publicznego hostowania.
 
+**Zatwierdzone połączenie podczas developmentu:** frontend korzysta
+z adresów względnych, a proxy Vite przekazuje `/api/v1` i `/health/live`
+do `application-api` na `http://127.0.0.1:8000`, bez zmiany ścieżek.
+Nie przekazuje wewnętrznego API; przeglądarka nie wywołuje bezpośrednio
+generatora ani walidatora. W zwykłym lokalnym użyciu gotowy frontend
+i API udostępnia `application-api`, bez udziału Vite.
+Nie wykonano konfiguracji ani sprawdzenia połączenia.
+
+**Zatwierdzona granica API:** nieznany adres pod `/api/v1` zwraca
+HTTP 404 z odpowiedzią JSON, nie stronę HTML frontendu. Format błędów
+pozostaje do uzgodnienia. W początkowym szkielecie ekran startowy
+jest dostępny pod `/`, a nieznane adresy stron i brakujące pliki zwracają
+HTTP 404 zamiast strony startowej. Nie jest to projekt docelowej nawigacji.
+Nie wykonano implementacji ani sprawdzenia tego zachowania.
+
 ## 12. Co pozostaje do potwierdzenia przed kodowaniem
+
+**Pliki konfiguracji — zatwierdzone w S1-T2:** każdy z trzech backendów
+ma własny lokalny `.env`, nieprzechowywany w Git, oraz wersjonowany
+`.env.example` z opisem wymaganych zmiennych bez prawdziwych sekretów.
+Pliki są do utworzenia w katalogach serwisów. Zmienne środowiskowe
+przekazane przy uruchomieniu procesu lub kontenera mają pierwszeństwo
+przed wartościami z `.env`. Zatwierdzono Pydantic Settings do odczytu
+i walidacji konfiguracji we wszystkich trzech backendach. Konfiguracja
+jest wczytywana przy starcie, a zastosowanie zmian wymaga restartu
+danego serwisu. Nie przeładowujemy automatycznie `.env` podczas działania;
+diagnostyka ocenia konfigurację faktycznie używaną przez proces.
+Pełny zestaw zmiennych pozostaje do uzgodnienia.
+Nie wybrano ani nie sprawdzono dokładnej wersji biblioteki.
+Jej integracja musi zachować tryb diagnostyczny przy błędnej konfiguracji,
+bez nieobsłużonego zatrzymania procesu i bez fikcyjnych sekretów.
+Ustalenie nie obejmuje konfiguracji frontendu ani monitora.
+Nie utworzono plików ani nie sprawdzono odczytu konfiguracji.
+
+**Konfiguracja — zatwierdzone w S1-T2:** brak lub błędna wartość
+wymaganej konfiguracji powoduje uruchomienie trybu diagnostycznego.
+Health check wskazuje przyczyny i ograniczenia bez wartości sekretów,
+a operacje wymagające tej konfiguracji są zablokowane.
+Dotyczy konfiguracji wymaganej dla uruchamianego zakresu, nie kluczy
+niewykorzystywanych dostawców. Decyzja zastępuje wcześniejszą zasadę
+blokowania startu procesu przy takich brakach. Nie gwarantuje uruchomienia
+samego serwera diagnostyki przy błędzie uniemożliwiającym jego działanie;
+sposób zgłaszania takich błędów pozostaje otwarty.
+
+**Diagnostyka startu i regularny monitoring — częściowo uzgodnione:**
+health check obejmuje poprawność uruchomienia serwisu, wymagane zmienne
+środowiskowe i sekrety, połączenia z wykorzystywanymi zewnętrznymi API,
+istnienie i dostęp do wymaganych zasobów wewnętrznych.
+Każdy backend sprawdza własne bezpośrednie zależności,
+a `application-api` zbiera statusy serwisów i własne wyniki
+w obraz całości. Bez sprawdzania wszystkich przez wszystkich
+i rekurencyjnego pobierania zbiorczego statusu.
+Raport rozróżnia zdolność do działania, częściową zdolność
+i całkowity brak zdolności; podaje przyczyny i ograniczenia bez sekretów.
+Jeden wspólny mechanizm regularnie wywołuje health checki i zbiera
+wyniki: przy uruchamianiu, a następnie co 30 minut.
+Zatwierdzono osobny proces monitora,
+niezależny od trzech backendów, sprawdzający również `application-api`.
+Monitor nie polega wyłącznie na agregacji w `application-api`, dzięki
+czemu ma wykrywać również zatrzymanie tego procesu. Narzędzie, technologia,
+sposób uruchomienia i szczegóły interfejsu monitora pozostają otwarte.
+Zatwierdzono osobny panel wyników w przeglądarce, dostępny również
+przy niedziałającej głównej aplikacji. Udostępnianie panelu i odczyt
+wyników nie mogą zależeć od działania `application-api`.
+Wygląd, adres i zabezpieczenia panelu pozostają do uzgodnienia.
+Panel ma udostępniać przycisk „Sprawdź teraz”, uruchamiający nową,
+bezpłatną i niedestrukcyjną diagnostykę bez czekania na kontrolę okresową.
+Nie jest to samo odświeżenie wyniku ani uruchomienie płatnej próby LLM.
+Ręczna kontrola nie zmienia harmonogramu automatycznego: nie przesuwa
+następnej kontroli i nie zeruje odstępu 30 minut.
+Obsługa jednoczesnych kontroli pozostaje otwarta.
+Przy poprawnej konfiguracji niedostępna
+zależność nie kończy procesu, ale blokuje wymagające jej operacje
+i jest widoczna w diagnostyce. Nie ponawiamy przez to operacji biznesowych.
+Szczegółowy katalog prób, kontrakt i ochrona raportu, szczegóły prezentacji,
+limity czasu, świeżość wyników i obsługa awarii samego
+monitora pozostają otwarte.
+Pozostaje do wyjaśnienia wpływ na niezależny start szkieletów S1-T1;
+nie zmieniono kontraktu `/health/live`.
+Automatyczne health checki mają wykonywać wyłącznie bezpłatne,
+niedestrukcyjne próby. Sprawdzenia wymagające płatnego wywołania LLM
+pozostają do ręcznego uruchomienia za zgodą użytkownika na daną próbę.
+Nie wybrano mechanizmu ręcznego uruchomienia i potwierdzania kosztu.
+Nie wykonano implementacji, testów ani płatnych prób.
 
 | Decyzja / próba | Dlaczego blokuje odpowiedni fragment implementacji |
 | --- | --- |
@@ -423,11 +595,11 @@ Wariant bez logowania nie jest konfiguracją gotową do publicznego hostowania.
 | Szczegóły próbnego importu — pozostała część OD-02 | Metodę już wybrano; trzeba zweryfikować wersję silnika, transakcje, provisioning, role i izolację. |
 | Wykonywalne reguły — OD-06 | Potrzebny ograniczony zakres i sposób zatwierdzania; nie uruchamiamy dowolnego SQL lub Pythona od modelu. |
 | Profile plików — OD-04 i OD-10 | Ten sam profil musi obowiązywać model, walidator i pobierany wynik. |
-| Wybór kandydata — OD-03 | Wcześniejszy użyteczny wynik jest chroniony, ale wagi lub ranking nie zostały zatwierdzone. |
-| Timeouty, anulowanie i retencja — OD-07–OD-09 | Nie można dopisać gwarancji przerwania u dostawcy i dostępności plików. |
+| Wybór kandydata — OD-03 rozstrzygnięte | Nie blokuje już implementacji: zwracamy najnowszego użytecznego kandydata, bez rankingu jakości (REQ-039, AC-36). |
+| Timeouty, anulowanie i cykl życia danych — OD-07–OD-09 | Nie można dopisać gwarancji przerwania u dostawcy ani dostępności niesprawdzonych artefaktów. Pobranie po przerwaniu dotyczy nadal dostępnego czatu. REQ-074–REQ-075 określają utratę dostępu także po odświeżeniu lub zamknięciu strony i ostrzeżenie. Opuszczenie czatu ma anulować trwające wykonanie, a pozostanie po ostrzeżeniu go nie anuluje (REQ-077). Techniczne wykrycie wyjścia i przekazanie anulowania, moment potwierdzenia zatrzymania, mechanizm zakończenia dostępu i fizyczne sprzątanie pozostają otwarte. |
 | Prototyp runnera | Potwierdzenie statusu, anulowania, restartu i braku drugiego wywołania. |
 | Prototyp LiteLLM i przegląd wersji | Dowód wymaganego śladu, możliwości, metryk i braku ukrytych ponowień. |
-| Potwierdzenie wariantu języków i topologii | Niniejszy dokument jest konkretną propozycją na bazie faworyta, nie wynikiem benchmarku trzech stosów. |
+| Szczegóły lokalnego uruchomienia | Python/FastAPI, React/TypeScript, trzy osobne serwisy backendowe i Docker Compose dla backendów oraz potrzebnych baz zatwierdzono 14 listopada 2026. Wersje obrazów, konfiguracja sieci i wolumenów oraz sposób uruchamiania frontendu nadal wymagają uzgodnienia. |
 
 Można rozpocząć projektowanie kontraktów i testów rdzenia na atrapach bez rozstrzygnięcia wszystkich szczegółów. Nie należy jednak nazywać gotową walidacją fragmentu, którego zakres pozostaje otwarty.
 

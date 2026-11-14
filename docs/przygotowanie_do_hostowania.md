@@ -27,7 +27,7 @@ Osobno rozpatrujemy:
 | Tożsamość | Jawny kontekst wykonującego operację; lokalny adapter zwraca jeden stały wewnętrzny identyfikator właściciela. Bez ekranu logowania, hasła i rejestru kont. | Adapter weryfikujący rzeczywistą tożsamość oraz mapowanie konta na wewnętrzny identyfikator. |
 | Własność danych | Projekt ma właściciela. Zlecenia, wykonania i artefakty mają jednoznaczny zakres dostępu wynikający z projektu. Nie musimy kopiować identyfikatora właściciela do każdej tabeli. | Wielu właścicieli oraz egzekwowanie dostępu w wariancie hostowanym. Współdzielenie i organizacje wymagają osobnej decyzji. |
 | Sprawdzanie dostępu | Jedna granica polityki dostępu używana przez przypadki użycia; minimalna lokalna polityka obsługująca jedynego właściciela. | Polityka obsługująca rzeczywistych użytkowników. Bez konieczności dodawania obsługi tokenów do generatora i walidatora. |
-| Długie wykonania | Identyfikator zadania, trwała historia, rozdzielenie startu od statusu i anulowania. Dopuszczalny pojedynczy wykonawca; bez wznawiania utraconej próby. | Współbieżność, dystrybucja pracy i wykrywanie utraty wykonawców. Automatyczne wznawianie wymagałoby osobnej zmiany zakresu. |
+| Długie wykonania | Identyfikator i stan bieżącego zadania, rozdzielenie startu od statusu i anulowania. Bieżący czat bez archiwum; po nowym czacie lub pełnym zamknięciu aplikacji nie wracamy do starej rozmowy i plików (REQ-074). Fizyczne sprzątanie wymaga OD-09. Dopuszczalny pojedynczy wykonawca; bez wznawiania utraconej próby. | Współbieżność, dystrybucja pracy i wykrywanie utraty wykonawców. Historia i automatyczne wznawianie wymagałyby osobnej zmiany zakresu. |
 | Dane i pliki | Zapis przez adaptery; artefakty identyfikowane przez logiczne referencje, nie publiczne ścieżki lokalne. Lokalne pliki są dopuszczalne. | Współdzielony magazyn oraz migracja istniejących danych, jeżeli wymaga tego wdrożenie. |
 | Konfiguracja | Adresy modeli, magazynów i usług oraz katalogi i limity nie są zaszyte w logice. | Konfiguracja dla wybranego środowiska hostowanego i zarządzanie sekretami tego środowiska. |
 | Stan operacji | Brak globalnej „aktualnej rozmowy”, „aktualnego projektu” lub „ostatniego wyniku” współdzielonego przez wszystkie operacje. | Wiele równoległych kontekstów, odpowiednia synchronizacja i testy współbieżności. |
@@ -66,7 +66,7 @@ Właściciel i zakres zadania muszą być rozpoznawalne nie tylko przy liście p
 
 - odczycie, zmianie i ponowieniu zlecenia;
 - uruchomieniu, odczycie statusu i anulowaniu wykonania;
-- historii promptów, odpowiedzi modeli, raportów i kosztów;
+- bieżącym raporcie i pomiarach; ewentualne przyszłe archiwum promptów i odpowiedzi wymaga tej samej kontroli dostępu, lecz nie należy do MVP;
 - dostępie do plików wejściowych, kandydatów, eksportów i diagnostyki;
 - przetwarzaniu w tle, odwołaniach do artefaktów i ewentualnej pamięci podręcznej.
 
@@ -78,7 +78,7 @@ Wiadomości, wyniki i pliki tymczasowe nie mogą trafiać do jednego współdzie
 
 ## 5. Przygotowanie do skalowania wykonawców
 
-Proponujemy oddzielić cykl zadania od czasu życia żądania i interfejsu. Stan wykonania, migawka wymagań, kandydaci i pomiary są zapisami trwałymi, a nie wyłącznie zmiennymi procesu.
+Proponujemy oddzielić cykl zadania od czasu życia pojedynczego żądania. Techniczny zapis stanu wykonania, migawki wymagań, kandydatów i pomiarów jest propozycją przygotowania do skalowania, nie wymaganiem odzyskania rozmowy po pełnym zamknięciu aplikacji. Obowiązuje granica dostępu do czatu z REQ-074; magazyn i fizyczne sprzątanie pozostają w OD-09.
 
 Proces obsługujący interakcję z użytkownikiem nie powinien być jedynym miejscem przechowywania stanu niezbędnego do kontynuowania i raportowania zadania. Jest to zgodne z rozdzieleniem procesów aplikacji od trwałego stanu opisywanym przez Twelve-Factor App [S3].
 
@@ -92,7 +92,9 @@ Na etapie MVP nie wymaga to brokera, wielu workerów ani automatycznego wznawian
 
 Uzgodniono brak automatycznego retry po błędzie technicznym (REQ-070). Po timeoutcie model może nadal obsługiwać żądanie; nie deklarujemy wycofania jego skutków u dostawcy. Szczegóły timeoutów i zapis dostępnych informacji o niepewnym rezultacie pozostają częścią OD-07.
 
-Uzgodnione REQ-069 wyklucza wznawianie anulowanego, zakończonego błędem lub utraconego wykonania w MVP. Trwały zapis służy historii, statusowi i raportowaniu; nowa próba zaczyna się od początku jako osobne wykonanie. Nie projektujemy tu wymaganego mechanizmu kontynuacji z checkpointu.
+Uzgodnione REQ-069 wyklucza wznawianie anulowanego, zakończonego błędem lub utraconego wykonania w MVP. Ponowienie przerwanej próby zaczyna się od początku jako osobne wykonanie. Nie wyklucza to zmiany otrzymanych danych w aktywnym czacie: LLM dostaje poprzednią paczkę i nowe polecenie, a zmieniona paczka podlega walidacji (REQ-073, REQ-076). Nowa prośba ma własny limit napraw zgodnie z REQ-033–REQ-034. Techniczne powiązanie prośby z wykonaniem i kontrakt kontekstu pozostają w OD-10, a szczegóły interfejsu — w OD-12. Dostęp do rozmowy i plików kończy się także po odświeżeniu lub zamknięciu strony (REQ-074). Ostrzeżenie i zachowanie danych po rezygnacji określa REQ-075, z ograniczeniami przeglądarki. Mechanizm zakończenia dostępu i fizyczne sprzątanie wymagają OD-09.
+
+Odrębna akcja „Podejmij kolejne 3 próby” po wyczerpaniu napraw nieudanej zmiany danych zleca ograniczoną serię zgodnie z REQ-078–REQ-079, nie wznowienie po awarii. Wymaga świadomej akcji użytkownika, nie może samoczynnie odnawiać limitu. Jej techniczne powiązanie z wykonaniem i licznikami nadal wymaga OD-10.
 
 Skalowanie generowania zależy także od dostępności modeli, sprzętu i limitów API. Dodanie kolejnej instancji aplikacji samo nie zwiększa pojemności lokalnego modelu.
 
@@ -126,7 +128,7 @@ Proponowane testy architektoniczne i kontraktowe, bez prawdziwego logowania:
 2. Dwa sztuczne konteksty testowe nie pozwalają odczytać, anulować ani ponowić cudzych zadań lub pobrać cudzych artefaktów.
 3. Zmiana identyfikatora zasobu lub deklarowanego `user_id` nie daje uprawnienia do innego właściciela.
 4. Dwie niezależne operacje nie dzielą bieżącej rozmowy, kandydatów ani plików tymczasowych.
-5. Odczyt statusu i historii korzysta z trwałego zapisu, a nie wyłącznie pamięci interfejsu.
+5. Status bieżącego wykonania pochodzi z backendu, nie wyłącznie pamięci interfejsu. Po zdarzeniach z REQ-074, także odświeżeniu i zamknięciu strony, nie wracamy do starej rozmowy i plików; zapisane projekty pozostają. Rezygnacja z wyjścia w ostrzeżeniu zachowuje dane (REQ-075).
 6. Konfiguracja oraz testowy adapter magazynu mogą się zmienić bez modyfikowania reguł wykonania.
 
 Sztuczne konteksty służą sprawdzeniu granic, nie udostępnieniu wielu kont w MVP. Testy te nie są certyfikacją bezpieczeństwa publicznego wdrożenia ani gwarancją wydajności.

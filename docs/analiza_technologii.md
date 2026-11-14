@@ -31,7 +31,7 @@ Priorytety oceny:
 5. Niewielki koszt lokalnego uruchomienia i późniejszej obsługi.
 6. Droga do hostowania, tożsamości użytkowników i współbieżnych zadań.
 
-Każdy wariant musi zachować gotowy SQL/CSV przygotowywany przez model, domyślny globalny limit 3 rund poprawek, zatrzymanie po błędzie technicznym, brak wznawiania, historię i rozdzielenie własności danych.
+Każdy wariant musi zachować gotowy SQL/CSV przygotowywany przez model, domyślny globalny limit 3 rund poprawek, zatrzymanie po błędzie technicznym, brak wznawiania, bieżący raport i rozdzielenie własności danych. Od wersji specyfikacji 1.6 historia wykonań jest poza MVP.
 
 Wybór narzędzi nie zatwierdza automatycznie proponowanego podziału procesów, metody potwierdzania importowalności ani obsługi całego dialektu PostgreSQL.
 
@@ -54,7 +54,7 @@ FastAPI opiera kontrakty na typach Pythona i Pydantic oraz generuje opis OpenAPI
 
 Moja rekomendacja dla tego projektu: ten sam język w zarządzaniu, generowaniu i walidacji, a dostawcy modeli za niewielkimi adapterami. Nie jest to teza, że Python automatycznie daje lepsze dane lub że jego serwer HTTP przyspieszy odpowiedź modelu.
 
-Kosztem jest konieczność dobrania i utrzymywania dodatkowych elementów. Sam FastAPI nie rozwiązuje historii, migracji, autoryzacji do projektów ani cyklu zadań.
+Kosztem jest konieczność dobrania i utrzymywania dodatkowych elementów. Sam FastAPI nie rozwiązuje zapisu projektów, migracji, kontroli dostępu ani cyklu zadań.
 
 ### B. TypeScript + NestJS
 
@@ -68,7 +68,7 @@ Nie proponujemy mieszaniny NestJS do zarządzania i Pythona do wszystkich operac
 
 Django dostarcza ORM, migracje, szablony i panel administracyjny; ma też gotowy system uwierzytelniania [S3]. HTMX pozwala aktualizować fragmenty strony odpowiedziami HTML i wspiera odpytywanie o stan [S5].
 
-Dla formularzy projektu, zatwierdzania zlecenia, historii i pobierania wyników ten wariant zasługuje na porównanie. Nie wymaga osobnej aplikacji React. Hosting i wielu użytkowników nie są argumentem samym w sobie przeciw temu podejściu.
+Dla formularzy projektu, zatwierdzania zlecenia, bieżącego statusu i pobierania wyników ten wariant zasługuje na porównanie. Nie wymaga osobnej aplikacji React. Hosting i wielu użytkowników nie są argumentem samym w sobie przeciw temu podejściu.
 
 Oddzielne generowanie i walidacja nadal pozostają możliwe; nie należy umieszczać całego procesu w widoku HTTP. Koszt pojawi się przy potrzebie znacznie bardziej rozbudowanego interfejsu klienckiego lub gdy szczególnie ważne będzie niezależne rozwijanie UI.
 
@@ -102,11 +102,11 @@ To wymaganie architektoniczne, a nie gotowa właściwość FastAPI lub mikroserw
 
 - **Adapter modelu** przyjmuje jawne wiadomości i ustawienia, a zwraca gotowy artefakt, dostępne metryki albo sklasyfikowany błąd. Nie zakładamy, że wszyscy dostawcy obsługują te same opcje; różnice możliwości muszą być jawne.
 - **Adapter walidacji** przyjmuje artefakt, migawkę schematu i zatwierdzone reguły, a zwraca ujednolicony raport z wykonanymi i pominiętymi sprawdzeniami. Nie eksportuje do innych części własnych obiektów parsera.
-- **Adapter magazynu aplikacji** realizuje operacje na projektach, wykonaniach i historii bez ujawniania modeli ORM. Wymiana silnika nadal wymaga migracji istniejących danych i sprawdzenia semantyki transakcji.
+- **Adapter magazynu aplikacji** realizuje operacje na projektach i stanie bieżącego wykonania bez ujawniania modeli ORM. Wymiana silnika nadal wymaga migracji istniejących danych i sprawdzenia semantyki transakcji.
 
 Cel to ograniczenie zmian do odpowiedniego adaptera i konfiguracji, **nie obietnica braku testów integracyjnych całej aplikacji**. Zmiana znaczenia raportu, zakresu obsługiwanych typów czy możliwości modelu może wymagać świadomej zmiany kontraktu.
 
-Wymiana bazy przechowującej historię aplikacji to także inna decyzja niż dodanie nowego docelowego dialektu danych. Przejście z generowania dla PostgreSQL na inny silnik dotknie co najmniej obsługi DDL, walidacji i profilu eksportu — nie tylko repozytorium.
+Wymiana bazy danych aplikacji to także inna decyzja niż dodanie nowego docelowego dialektu danych. Przejście z generowania dla PostgreSQL na inny silnik dotknie co najmniej obsługi DDL, walidacji i profilu eksportu — nie tylko repozytorium.
 
 ## 5. Frontend: React czy coś prostszego
 
@@ -129,7 +129,7 @@ Układ doprecyzowany i potwierdzony w rozmowie 21 października 2026; konkretne 
 
 PostgreSQL egzekwuje zadeklarowane ograniczenia, natomiast `COPY` ma parametry formatu CSV, wartości pustych i obsługi błędów [S10]. Nie wolno uzyskać sukcesu przez pomijanie błędnych wierszy. Sam udany import nie dowodzi kompletności planu ani spełnienia dodatkowych reguł.
 
-Potrzebne są **odrębne środowiska danych aplikacji i walidacji**, bez wspólnych uprawnień do historii. Rekomendujemy ograniczone role i konstrukcje SQL, limity czasu i zasobów oraz brak dostępu do danych hosta i innych zleceń. Nie dajemy aplikacji ogólnego dostępu do gniazda administracyjnego kontenerów. Sam kontener nie jest pełnym dowodem bezpieczeństwa.
+Potrzebne są **odrębne środowiska danych aplikacji i walidacji**, bez wspólnych uprawnień do danych aplikacji. Rekomendujemy ograniczone role i konstrukcje SQL, limity czasu i zasobów oraz brak dostępu do danych hosta i innych zleceń. Nie dajemy aplikacji ogólnego dostępu do gniazda administracyjnego kontenerów. Sam kontener nie jest pełnym dowodem bezpieczeństwa.
 
 Model zwraca gotowy wynik. W tym układzie nie używamy parsera do przepisywania go ani Pydantic do cichego konwertowania danych kandydata. Pydantic może domyślnie konwertować typy i udostępnia tryb ścisły [S15]; to narzędzie kontraktów aplikacji, nie zamiennik semantyki PostgreSQL.
 
@@ -161,12 +161,12 @@ Nie wybieramy jeszcze konkretnych modeli. Kontekst i długość odpowiedzi wymag
 
 Po dodatkowym przeglądzie dokumentacji rekomendujemy **własny port `LlmClient` i implementację `LiteLlmAdapter`, korzystającą z LiteLLM Python SDK wewnątrz usługi generowania**. To preferowany kandydat do próby, nie zatwierdzona zależność. Nie uruchamiamy osobnego LiteLLM Proxy/Gateway na potrzeby MVP. SDK jest biblioteką w procesie i udostępnia wspólne wywołania, odpowiedzi oraz mapowanie błędów; obsługuje też Ollamę, w tym ścieżkę `ollama_chat` [S25, S26].
 
-Własna warstwa ma obejmować kontrakt żądania i wyniku, jawne możliwości modelu, konfigurację połączenia, mapowanie błędów i rejestr prób. Nie implementujemy ponownie komunikacji HTTP ani specyfiki każdego API. Klasy LiteLLM nie wychodzą poza adapter. Jeśli potrzebna funkcja dostawcy lub wierność historii nie przejdzie testów, podłączymy bezpośredni adapter danego SDK pod ten sam port, bez zmiany logiki generowania.
+Własna warstwa ma obejmować kontrakt żądania i wyniku, jawne możliwości modelu, konfigurację połączenia, mapowanie błędów i dane potrzebne do bieżącego raportu. Nie implementujemy ponownie komunikacji HTTP ani specyfiki każdego API. Klasy LiteLLM nie wychodzą poza adapter. Jeśli potrzebna funkcja dostawcy lub przekazywanie wymaganych pomiarów nie przejdzie testów, podłączymy bezpośredni adapter danego SDK pod ten sam port, bez zmiany logiki generowania.
 
 Warunki przyjęcia:
 
 - Brak technicznych retry we wszystkich warstwach. Dokumentacja rozróżnia `num_retries` LiteLLM i `max_retries` klienta dostawcy; konfigurację bezpośrednich wywołań SDK musimy sprawdzić dla przypiętej wersji, a liczbę faktycznych żądań potwierdzić testem. Nie włączamy fallbacków, cache odpowiedzi ani automatycznego skracania kontekstu [S17, S27].
-- Rejestrujemy rzeczywiste treści żądań po mapowaniu do dostawcy i odpowiedzi oraz ustawienia, identyfikatory i dostępne pomiary. Same dane przed wywołaniem wspólnej biblioteki nie dowodzą wierności śladu. LiteLLM dokumentuje callbacki i mechanizm raw request/response; ich kompletność dla wybranych dostawców jest przedmiotem próby. Zapisujemy tylko dozwolone pola, bez nagłówków uwierzytelniania i kluczy; nie uruchamiamy zewnętrznego eksportu logów [S28].
+- Weryfikujemy ustawienia, identyfikatory i dostępne pomiary faktycznych wywołań, bez archiwizacji pełnych wiadomości. LiteLLM dokumentuje callbacki oraz mechanizm raw request/response [S28], lecz samo ich istnienie nie tworzy wymagania historii. Dane raportu nie zawierają nagłówków uwierzytelniania i kluczy; nie uruchamiamy zewnętrznego eksportu logów.
 - Nie włączamy cichego odrzucania nieobsługiwanych parametrów (`drop_params`). Różnice możliwości dostawców są jawne. Brak metryki nie jest zerem, a szacowany koszt nie jest rozliczeniem dostawcy [S29].
 - Ucięta odpowiedź nie staje się sukcesem przez sam fakt odpowiedzi HTTP. Zachowujemy informację o zakończeniu i przekazujemy artefakt do ustalonych etapów walidacji. Adapter nie poprawia SQL/CSV i nie steruje rundami poprawek [S30].
 - Timeout i anulowanie są testowane wraz ze spóźnioną odpowiedzią. Konfiguracja i dane jednego wykonania nie mogą wyciekać do następnego. Dokumentacja SDK ostrzega o globalnych ustawieniach procesu i braku bezpieczeństwa wątkowego; nie zmieniamy globalnych kluczy ani callbacków per wykonanie [S25].
@@ -186,9 +186,9 @@ Do próby są dwie realizacje przyjętego kontraktu:
 
 Kandydatem do drugiej próby jest **Procrastinate**, działający w oparciu o PostgreSQL. Dokumentuje strategie retry, anulowanie i osobny mechanizm ponawiania zadań pozostawionych po utracie workera [S22]. Nie zatwierdzamy go bez prototypu. Nie używamy ręcznego retry biblioteki do kontynuowania starego wykonania: nasz przycisk tworzy nowe.
 
-Wybór takiego narzędzia dodaje zależność infrastruktury pracy od PostgreSQL. Nie wolno udawać, że zmiana magazynu aplikacji automatycznie usunie także tę zależność. Jeżeli zadania używają technicznego schematu kolejki, dostęp workerów do niego nie oznacza dostępu do wewnętrznych tabel projektów i historii.
+Wybór takiego narzędzia dodaje zależność infrastruktury pracy od PostgreSQL. Nie wolno udawać, że zmiana magazynu aplikacji automatycznie usunie także tę zależność. Jeżeli zadania używają technicznego schematu kolejki, dostęp workerów do niego nie oznacza dostępu do wewnętrznych danych projektów i bieżących wykonań.
 
-W każdym wariancie restart nie odtwarza wykonywania starego zadania. Pozostawiony status jest uzgadniany z faktem utraty procesu, a historia pozostaje do odczytu.
+W każdym wariancie restart nie odtwarza wykonywania starego zadania. Jeżeli pozostaje stan roboczy, nie może spowodować wznowienia. Zdarzenia z REQ-074, także odświeżenie i zamknięcie strony, kończą dostęp do rozmowy i plików. Ostrzeżenie z REQ-075 podlega ograniczeniom przeglądarki opisanym w sekcji 11.1 specyfikacji. Techniczna trwałość nie uzasadnia przywrócenia starego czatu. Mechanizm zakończenia dostępu i fizyczne sprzątanie pozostają w OD-09.
 
 ## 10. Przechowywanie i lokalne uruchomienie
 
@@ -238,7 +238,7 @@ Decyzję o dodaniu wyszukiwania wektorowego poprzedzimy pomiarem rozmiaru rzeczy
 | Utrzymanie kontraktów | Python–TypeScript przez OpenAPI i testy | Wspólny język pomaga, lecz kontrakty sieciowe nadal podlegają wersjonowaniu | Mniej kontraktów UI JSON, ale kontrakty usług i formularzy pozostają |
 | Uruchomienie i modele | Wspólne koszty zależne głównie od przyjętej topologii i badań | Te same kategorie kosztów | Te same koszty walidacji i modeli; możliwie prostsze dostarczanie UI |
 
-Nie wyliczamy 5-letniego TCO w pieniądzu bez planu użytkowania i hostingu. Trzeba uwzględnić pobranie i pamięć modeli, wywołania API, przestrzeń na historię, testy, aktualizacje, migracje i obsługę narzędzi uruchomieniowych.
+Nie wyliczamy 5-letniego TCO w pieniądzu bez planu użytkowania i hostingu. Trzeba uwzględnić pobranie i pamięć modeli, wywołania API, przestrzeń na projekty i dane robocze, testy, aktualizacje, migracje i obsługę narzędzi uruchomieniowych.
 
 Nie wykonano audytu CVE ani pełnego audytu licencji. Po wybraniu wersji potrzebne są pliki blokad zależności, sprawdzenie podatności i licencji oraz regularne aktualizacje. Brak konkretnej znalezionej podatności w tej analizie nie jest potwierdzeniem bezpieczeństwa.
 
@@ -267,7 +267,7 @@ Wstępne uporządkowanie:
 - **B — równorzędny kandydat przy wyraźnej przewadze znajomości TypeScript.**
 - **C — kandydat do ograniczenia kodu aplikacyjnego i frontendowego**, jeśli prosty model interakcji wystarczy.
 
-Rekomendacja nie zamyka OD-01, OD-02, OD-03 ani sposobu wykonywania reguł. Nie zmienia też zatwierdzonego zachowania aplikacji.
+Rekomendacja nie zamyka OD-01, OD-02 ani sposobu wykonywania reguł. OD-03 rozstrzygnięto osobno 14 listopada 2026: zwracamy wyłącznie najnowszego użytecznego kandydata (REQ-039, AC-36). Sama rekomendacja technologiczna nie zmienia zatwierdzonego zachowania aplikacji.
 
 Do dalszego szczegółowego projektowania rozpisano wariant A. Aktualny status kierunków, warunków i otwartych punktów znajduje się w [rejestrze ustaleń](ustalenia_architektoniczne.md), a zakres poszczególnych komponentów w [serwisach i technologiach](serwisy_i_technologie.md). Samo przygotowanie tego projektu nie zastępuje prób technicznych.
 

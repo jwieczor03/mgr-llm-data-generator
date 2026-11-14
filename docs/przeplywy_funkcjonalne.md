@@ -4,7 +4,7 @@
 
 **Status:** objaśnienie uzgodnionych wymagań, bez rozszerzania ich zakresu.
 
-Dokument opisuje zachowanie widoczne dla użytkownika i logiczny przebieg wykonania. Uczestnicy i etapy diagramów **nie oznaczają wybranych mikroserwisów, bibliotek ani technologii**. Układ ekranów pozostaje otwarty.
+Dokument opisuje zachowanie widoczne dla użytkownika i logiczny przebieg wykonania. Uczestnicy i etapy diagramów **nie oznaczają wybranych mikroserwisów, bibliotek ani technologii**. Głównym widokiem jest czat z wyborem projektu, poleceniem i odpowiedziami; szczegółowy układ pozostaje otwarty.
 
 Uzupełnienie z projektowania architektury: interfejs jest lokalną aplikacją webową, model przygotowuje gotowy SQL/CSV, a przerwanego wykonania nie wznawia się. Szczegóły pokazuje [architektura ogólna](architektura.md). Naruszenia danych uruchamiają ograniczone poprawki; błędy techniczne kończą wykonanie bez automatycznego retry (REQ-032–REQ-037, REQ-069–REQ-070).
 
@@ -31,9 +31,11 @@ sequenceDiagram
 
 Zapis projektu nie jest obietnicą obsługi każdego elementu wgranego DDL. Jeśli zlecenie zależy od nieobsługiwanej funkcji lub obowiązkowej zależności kołowej, aplikacja zgłasza blokadę przed generowaniem.
 
-Aktualizacja polega na wgraniu nowego DDL. Nie zmienia schematów i reguł przypisanych do wcześniejszych wykonań.
+Aktualizacja polega na wgraniu nowego DDL. Nie zmienia wymagań rozpoczętego wcześniej, nadal obsługiwanego wykonania.
 
-**Powiązanie:** REQ-009–REQ-019; kryteria AC-01–AC-08.
+Po zatwierdzeniu relacja nieobecna w DDL staje się obowiązkowym warunkiem wykonania zadania. Aplikacja sprawdza ją osobno po imporcie, bez dopisywania do oryginalnego DDL.
+
+**Powiązanie:** REQ-009–REQ-019; kryteria AC-01–AC-08 i AC-34.
 
 ## 2. Od polecenia do zatwierdzonego zlecenia
 
@@ -64,14 +66,14 @@ Dokładny początek pomiarów i rozliczanie etapu przygotowania zlecenia wymagaj
 ```mermaid
 flowchart TD
     A["Zatwierdzone zlecenie"] --> B["Wygeneruj pierwszego kandydata danych"]
-    B --> C["Sprawdź kompletność, importowalność i dodatkowe reguły"]
+    B --> C["Sprawdź kompletność, importowalność, obowiązujące relacje i dodatkowe reguły"]
     C --> D["Zachowaj wynik oraz raport próby"]
     D --> E{"Czy spełniono warunki wykonania i wszystkie sprawdzalne reguły?"}
     E -->|"Tak"| F["Zakończ jako wykonane i wskaż zwracany wynik"]
     E -->|"Nie"| G{"Czy pozostał limit poprawek?"}
     G -->|"Tak"| H["Przekaż naruszenia do poprawy i przygotuj kolejnego kandydata"]
     H --> C
-    G -->|"Nie"| I{"Czy istnieje zachowany kompletny i importowalny kandydat?"}
+    G -->|"Nie"| I{"Czy zachowany kandydat spełnia wszystkie obowiązkowe warunki wykonania?"}
     I -->|"Tak"| J["Wskaż użytecznego kandydata i jego rzeczywiste naruszenia biznesowe"]
     J --> K["Zakończ jako wykonane z raportem naruszeń"]
     I -->|"Nie"| L["Zakończ jako niewykonane z opisem braków i błędów"]
@@ -82,24 +84,24 @@ flowchart TD
 
 ### Zasady interpretacji
 
-- Walidacja ma potwierdzoną kolejność: składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do pustego, odizolowanego PostgreSQL oraz kompletność → dodatkowe reguły biznesowe. Wstępna kontrola nie zastępuje importu; niewykonalne dalsze sprawdzenia mają jawną przyczynę.
+- Walidacja ma potwierdzoną kolejność: składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do pustego, odizolowanego PostgreSQL, obowiązujące relacje i kompletność → dodatkowe reguły biznesowe. Wstępna kontrola nie zastępuje importu; niewykonalne dalsze sprawdzenia mają jawną przyczynę.
 - Pierwsze wygenerowanie nie zużywa jednej z domyślnych 3 rund poprawek.
 - Limit dotyczy całego zlecenia, nie każdej tabeli osobno.
 - Liczba wywołań modeli może być inna niż liczba rund, szczególnie w wariancie wieloagentowym.
-- Warunki wykonania to **kompletność i importowalność**. Dodatkowe reguły mogą po zakończeniu pozostać naruszone.
+- Warunki wykonania to **kompletność, importowalność i zgodność wszystkich obowiązujących relacji**, także zatwierdzonych poza DDL. Udany import bez poprawnych relacji nie wystarcza. Dodatkowe reguły mogą po zakończeniu pozostać naruszone.
 - Jeśli reguła jest też ograniczeniem schematu blokującym import, jej naruszenie wpływa na wykonanie zadania.
 - Niewykonane obowiązkowe sprawdzenie nie oznacza pozytywnej weryfikacji.
 - Wskazówki jakościowe nie są testami automatycznymi i nie uruchamiają same przez się pętli mającej zagwarantować realizm.
-- Kandydat kompletny i importowalny pozostaje dostępny, nawet gdy kolejna poprawka go uszkodzi.
-- Raport zwracanego wyniku dotyczy dokładnie tej wersji danych, a historia pokazuje również pozostałe próby.
+- Użyteczny kandydat spełniający wszystkie warunki REQ-027 pozostaje dostępny, nawet gdy kolejna poprawka go uszkodzi.
+- Raport zwracanego wyniku dotyczy dokładnie tej wersji danych. Nie powstaje historia pozostałych prób.
 
-**Otwarte:** wybór pomiędzy kilkoma użytecznymi kandydatami o różnej zgodności biznesowej opisuje OD-03. Diagram nie narzuca rankingu ani punktacji.
+**Uzgodnione:** zwracamy wyłącznie najnowszego użytecznego kandydata, nawet jeśli wcześniejszy miał mniej dodatkowych naruszeń biznesowych. Jeśli ostatnia poprawka nie spełnia obowiązkowych warunków, wracamy do najnowszego wcześniejszego użytecznego wyniku. To ochrona wyniku bieżącego wykonania, nie archiwum kandydatów. Nie tworzymy rankingu jakości (REQ-039, AC-36; OD-03 zamknięte).
 
-**Powiązanie:** REQ-027–REQ-040; kryteria AC-11–AC-18.
+**Powiązanie:** REQ-012, REQ-027–REQ-040; kryteria AC-11–AC-18, AC-34 i AC-36.
 
 ## 4. Anulowanie i błąd operacyjny
 
-Podczas wykonania użytkownik może zlecić przerwanie procesu. Aplikacja zachowuje dotychczasową historię oraz dostępne pomiary, a wykonanie oznacza jako **anulowane przez użytkownika**.
+Podczas wykonania użytkownik może zlecić przerwanie procesu. Bieżący status oznacza wykonanie jako **anulowane przez użytkownika**, a dostępny raport zawiera rzeczywiste pomiary. Nie wymaga to archiwum przebiegu.
 
 Niedostępność modelu lub inny błąd uniemożliwiający kontynuację nie jest tym samym co poprawnie przeprowadzony proces, który wygenerował niekompletne lub nieimportowalne dane.
 
@@ -110,19 +112,19 @@ Niedostępność modelu lub inny błąd uniemożliwiający kontynuację nie jest
 | Użytkownik przerywa próbę | Anulowane przez użytkownika. |
 | Błąd operacyjny uniemożliwia kontynuację | Przerwane błędem, ze wskazaniem przyczyny. |
 
-Nie zakłada się natychmiastowego przerwania już obsługiwanego żądania zewnętrznego. Dostępność częściowych danych lub wcześniej użytecznego kandydata po anulowaniu albo błędzie pozostaje otwarta w OD-08. Konkretne timeouty i raportowanie niepełnych danych wywołania opisuje OD-07. Błąd techniczny kończy wykonanie bez automatycznego retry, zmiany wariantu i rundy naprawczej (REQ-070).
+Nie zakłada się natychmiastowego przerwania już obsługiwanego żądania zewnętrznego. Wcześniej zapisany użyteczny kandydat i jego raport pozostają dostępne do pobrania po anulowaniu lub błędzie (REQ-047, AC-35). Status i przyczyna przerwania są nadal widoczne; pobranie nie oznacza sukcesu całego wykonania. Dostępność częściowych lub niesprawdzonych artefaktów i dokładny moment zatrzymania pozostają otwarte w OD-08. Konkretne timeouty i raportowanie niepełnych danych wywołania opisuje OD-07. Błąd techniczny kończy wykonanie bez automatycznego retry, zmiany wariantu i rundy naprawczej (REQ-070).
 
-Nie ma wznawiania anulowanej, zakończonej błędem lub utraconej próby. Ręczne ponowienie zaczyna nowe wykonanie od początku, bez nadpisywania wcześniejszej historii (REQ-069).
+Nie ma wznawiania anulowanej, zakończonej błędem lub utraconej próby. Ręczna kolejna próba po takim przerwaniu zaczyna nowe wykonanie od początku na podstawie przygotowanego zlecenia, nie zapisu w historii (REQ-059, REQ-069). To inna akcja niż dodatkowa seria napraw po wyczerpaniu limitu z REQ-079, opisana w sekcji 6.
 
-**Powiązanie:** REQ-041–REQ-042, REQ-052; kryterium AC-19.
+**Powiązanie:** REQ-040–REQ-042, REQ-047, REQ-072; kryteria AC-19 i AC-35.
 
 ## 5. Odbiór wyniku
 
 ```mermaid
 flowchart TD
     A["Zakończone wykonanie"] --> B["Pokaż status i raport rzeczywiście wybranego kandydata"]
-    B --> C{"Czy dostępny jest wynik oznaczony jako wykonany?"}
-    C -->|"Nie"| D["Pokaż przyczynę, historię i dostępny raport bez deklaracji gotowości danych"]
+    B --> C{"Czy dostępna jest sprawdzona paczka spełniająca obowiązkowe warunki?"}
+    C -->|"Nie"| D["Pokaż przyczynę i dostępny raport bez deklaracji gotowości danych"]
     C -->|"Tak"| E{"Format ustalony w zleceniu"}
     E -->|"INSERT"| F["Udostępnij polecenia INSERT dla PostgreSQL"]
     E -->|"CSV"| G["Udostępnij paczkę plików: osobny CSV na tabelę"]
@@ -131,31 +133,41 @@ flowchart TD
     H --> I
 ```
 
-Raport przedstawia osobno kompletność, importowalność i sprawdzalne reguły. Nie zawiera jednej zbiorczej oceny realizmu. Szczegóły profilu CSV i prostego raportu pozostają otwarte w OD-04 i OD-05.
+Raport przedstawia osobno kompletność, importowalność, obowiązujące relacje i dodatkowe sprawdzalne reguły. Nie zawiera jednej zbiorczej oceny realizmu. Szczegóły profilu CSV i prostego raportu pozostają otwarte w OD-04 i OD-05.
 
-To diagram odbioru gotowej paczki. Nie rozstrzyga dostępności surowych artefaktów nieudanych lub przerwanych prób do diagnostyki.
+To diagram odbioru gotowej paczki, także wcześniej sprawdzonej przed anulowaniem lub błędem. W tym drugim przypadku pobranie nie zmienia statusu całego wykonania. Zwracamy najnowszego użytecznego kandydata zgodnie z REQ-039. Diagram nie rozstrzyga dostępności surowych artefaktów nieudanych lub przerwanych prób do diagnostyki.
 
-**Powiązanie:** REQ-043–REQ-051; kryteria AC-20–AC-22 oraz AC-25.
+**Powiązanie:** REQ-043–REQ-051; kryteria AC-20–AC-22, AC-25 i AC-35.
 
-## 6. Historia i ręczne ponowienie
+## 6. Rozmowa w bieżącym czacie i nowy czat
 
-1. Użytkownik wskazuje historyczne zlecenie.
-2. Aplikacja korzysta z zapisanych dla niego wymagań, nie zastępuje ich aktualnym DDL ani regułami projektu.
-3. Autor może wcześniej ręcznie zmienić podłączone modele, prompty wewnętrzne lub organizację procesu poza obowiązkowym interfejsem generatora.
-4. Ponowienie tworzy osobne wykonanie z dawnymi wymaganiami zadania i aktualnym wariantem generowania.
-5. Historia zachowuje faktyczne wiadomości, wyniki prób, raporty i dostępne pomiary, bez danych uwierzytelniających.
-6. Użytkownik może pobrać wynik oraz prosty raport do późniejszej oceny zewnętrznej.
+Użytkownik wybiera projekt w głównym oknie czatu, wpisuje polecenie i otrzymuje odpowiedź oraz dostępny wynik. Po odpowiedzi może wysyłać kolejne polecenia i kontynuować tę samą rozmowę. Nie wymaga to archiwum dawnych wykonań ani wyboru historycznego zlecenia.
 
-Nie powstaje automatyczna seria eksperymentów ani ranking. Ocena realizmu, również wsparta LLM, pozostaje poza generatorem.
+Gdy prosi o zmianę danych, aplikacja przekazuje dotychczasową paczkę jako kontekst do LLM wraz z nowym poleceniem. Model ma zmienić w niej wskazane dane, nie wygenerować niezależnego zestawu. Poprawiona paczka jest nowym kandydatem i przechodzi walidację; raport musi dotyczyć tej wersji. Na przykład zmiana adresów 100 klientów na polskie dotyczy tych samych klientów. Konflikty z obowiązującymi wymaganiami wyjaśniamy przed zmianą.
 
-**Powiązanie:** REQ-052–REQ-065; kryteria AC-23–AC-27.
+„Nowy czat”, wykonane odświeżenie i zamknięcie strony kończą dostęp do starej konwersacji i jej plików. Po powrocie, także po pełnym zamknięciu aplikacji, widzimy nowy czat. Zapisane projekty pozostają dostępne.
+
+Przed odświeżeniem lub zamknięciem strony z rozmową lub danymi wymagane jest ostrzeżenie o ich utracie i możliwość pozostania. Rezygnacja nie resetuje czatu; potwierdzone i wykonane opuszczenie strony kończy dostęp. Jest to standardowe okno przeglądarki, z ograniczeniami opisanymi w sekcji 11.1 specyfikacji, nie gwarancja własnego tekstu ani działania przy awarii.
+
+W nadal dostępnym czacie wynik i raport można pobrać zgodnie z REQ-047, także po anulowaniu lub błędzie. Nie pozwala to wrócić do nich po zdarzeniach z REQ-074. Historia czatów i plików jest kandydatem na dalszy rozwój poza MVP. Organizacja badań i gromadzenie materiałów pozostają poza generatorem.
+
+Opuszczenie czatu ma także anulować trwające wykonanie (REQ-077). Samo wyświetlenie ostrzeżenia i pozostanie na stronie go nie anuluje. Po przyjęciu anulowania nie rozpoczynamy dalszych etapów ani wywołań LLM; spóźniona odpowiedź nie trafia do nowej rozmowy. Nie obiecujemy natychmiastowego przerwania żądania u dostawcy.
+
+Każda nowa prośba użytkownika o zmianę danych ma własny limit, domyślnie 3 automatyczne rundy naprawcze po pierwszej zmienionej paczce (REQ-033–REQ-034, AC-44). Zużycie limitu poprzedniej prośby go nie pomniejsza, a automatyczne poprawki go nie odnawiają. Ręczna prośba nie jest automatyczną czwartą rundą poprzedniej prośby ani wznowieniem zakończonego procesu.
+
+Jeśli mimo 3 rund nie uzyskano użytecznej poprawionej paczki, użytkownik widzi komunikat o nieudanej zmianie. Poprzednia sprawdzona wersja i jej raport nadal są dostępne w tym czacie, ale nie jako wynik spełniający nową prośbę (REQ-078). Przycisku „Podejmij kolejne 3 próby” można użyć tylko raz dla danej prośby, zlecając do 3 dodatkowych rund naprawczych (REQ-079). Po kliknięciu LLM otrzymuje ostatnią nieudaną wersję i listę wykrytych w niej błędów. Naprawia ją, zamiast zaczynać od poprzedniej sprawdzonej paczki; ta i jej raport pozostają bezpieczne. Bez kliknięcia nic nie rusza. Nie dodajemy poza limitem nowego pierwszego kandydata. Jeśli dodatkowa seria również nie da użytecznej poprawionej paczki, kończymy naprawy tej prośby, informujemy o niepowodzeniu i nie pokazujemy ponownie przycisku. Poprzednia sprawdzona paczka i jej raport pozostają dostępne. Nadal obowiązuje wcześniejsze zakończenie po naprawie, anulowaniu lub błędzie technicznym.
+
+Po nieudanym pierwszym generowaniu, gdy ani pierwszy kandydat, ani domyślne 3 rundy naprawcze nie dały użytecznej paczki, pokazujemy niepowodzenie bez przycisku „Podejmij kolejne 3 próby” i bez dodatkowej serii (REQ-079, AC-47).
+
+Nadal otwarte: techniczne wykrycie wyjścia, przekazanie anulowania i moment potwierdzenia zatrzymania (OD-08 i OD-09), mechanizm zakończenia dostępu i fizyczne sprzątanie (OD-09), przypisanie prośby i dodatkowej serii do wykonania oraz liczników i szczegóły przekazania kontekstu (OD-10). Pozostała prezentacja kolejnych wyników pozostaje w OD-12.
+
+**Powiązanie:** REQ-033–REQ-034, REQ-047, REQ-057, REQ-059–REQ-065, REQ-072–REQ-079; kryteria AC-23, AC-25–AC-27 i AC-38–AC-47. AC-24 jest poza MVP.
 
 ## 7. Zachowane propozycje UX — nie są wymaganiami MVP
 
 Z dawnej specyfikacji zachowano do późniejszego rozpatrzenia:
 
 - podgląd fragmentu wygenerowanych danych zamiast pokazywania całej paczki;
-- możliwość kopiowania poleceń `INSERT`;
-- dodatkową prośbę o zmianę już zakończonego wyniku.
+- możliwość kopiowania poleceń `INSERT`.
 
-Nie zatwierdzono limitu podglądu, kolorowania składni, liczby zakładek ani sposobu ręcznej korekty zakończonej paczki. W szczególności ostatni pomysł wymaga rozstrzygnięcia, czy oznacza nowe zlecenie, czy nową wersję wyniku; nie jest ukrytą czwartą rundą automatycznych poprawek.
+Nie zatwierdzono limitu podglądu, kolorowania składni ani liczby zakładek. Kolejne polecenia i zmiana poprzedniej paczki przez LLM należą do MVP (REQ-073, REQ-076); pozostałe szczegóły opisano w sekcji 6.

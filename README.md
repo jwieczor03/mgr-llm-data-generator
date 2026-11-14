@@ -2,19 +2,31 @@
 
 Aplikacja do generowania syntetycznych danych testowych dla wielu powiązanych tabel PostgreSQL na podstawie schematu DDL, reguł biznesowych i polecenia w języku naturalnym.
 
-Wynikiem są polecenia `INSERT` albo paczka CSV. Aplikacja ma sprawdzać kompletność i importowalność danych, wykonywać ograniczoną liczbę poprawek oraz zachowywać historię wykonania.
+Wynikiem są polecenia `INSERT` albo paczka CSV. Aplikacja ma sprawdzać kompletność i importowalność danych, wykonywać ograniczoną liczbę poprawek oraz udostępniać wynik z prostym raportem. MVP nie przechowuje historii wykonań; jest ona wyłącznie potencjalnym kierunkiem rozwoju.
 
 ## Status
 
 Projekt jest na etapie specyfikacji i projektu architektury. Repozytorium zawiera dokumentację, nie gotową aplikację. Zapisano kierunki technologiczne i szczegółową propozycję serwisów; konkretne wersje, część mechanizmów i fizyczny podział nadal wymagają potwierdzenia. Instrukcja uruchomienia powstanie wraz z działającym rozwiązaniem.
 
-MVP jest jednoosobowe i uruchamiane lokalnie. Jego zakres nie obejmuje obowiązkowego wdrożenia AWS, generowania samodzielnych dokumentów JSON ani automatycznej platformy eksperymentalnej.
+MVP jest jednoosobowe i uruchamiane lokalnie. Jego zakres nie obejmuje obowiązkowego wdrożenia AWS, obsługi kolumn `json`/`jsonb` w schematach użytkownika, generowania samodzielnych dokumentów JSON ani automatycznej platformy eksperymentalnej. Obsługa tych kolumn jest potencjalnym kierunkiem rozwoju, nie zaplanowaną funkcją.
 
 Interfejs działa w lokalnej przeglądarce. Model przygotowuje gotowy SQL albo treść CSV; aplikacja zapisuje, sprawdza i udostępnia wynik. Przerwanego wykonania nie wznawia się — ręczne ponowienie tworzy nową próbę od początku.
 
-Naruszenia danych uruchamiają automatyczne poprawki, domyślnie do 3 rund dla całego wykonania. Błąd techniczny kończy wykonanie bez automatycznego retry lub zmiany wariantu; użytkownik może uruchomić nową próbę.
+Głównym widokiem jest czat: użytkownik wybiera projekt, wpisuje polecenie, otrzymuje odpowiedź i dostępny wynik, a następnie może kontynuować rozmowę kolejnymi poleceniami. „Nowy czat”, odświeżenie i zamknięcie strony kończą dostęp do rozmowy i jej plików. Po powrocie, także po pełnym zamknięciu aplikacji, widzimy nowy czat. Przed odświeżeniem lub zamknięciem strony wymagamy ostrzeżenia o utracie danych; rezygnacja z wyjścia zachowuje rozmowę. Okno i możliwość jego wyświetlenia podlegają ograniczeniom przeglądarki opisanym w sekcji 11.1 specyfikacji. Zapisane projekty pozostają.
 
-Uzgodniona walidacja: składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do odizolowanego PostgreSQL oraz kompletność → dodatkowe reguły biznesowe. Dokładna macierz typów i katalog reguł nadal wymagają zatwierdzenia.
+Opuszczenie czatu ma także anulować trwające generowanie (REQ-077). Samo otwarcie ostrzeżenia lub pozostanie na stronie go nie anuluje. Po przyjęciu anulowania aplikacja nie rozpoczyna dalszych etapów; nie obiecujemy natychmiastowego zatrzymania żądania już przyjętego przez dostawcę LLM. Mechanizm wykrycia wyjścia i przekazania anulowania pozostaje do doprojektowania.
+
+W nadal dostępnym czacie po anulowaniu lub awarii można pobrać wcześniej zapisaną paczkę spełniającą obowiązkowe warunki wraz z jej raportem. Nie zmienia to statusu całego wykonania na wykonane.
+
+W obrębie jednego wykonania zwracamy wyłącznie najnowszą paczkę spełniającą obowiązkowe warunki, bez rankingu dodatkowych naruszeń biznesowych. Stan roboczy chroni ją przed utratą przy nieudanej poprawce; nie jest archiwum dawnych wykonań. Historia czatów i plików jest wyłącznie kandydatem na dalszy rozwój aplikacji poza MVP.
+
+Przy kolejnym poleceniu zmiany danych LLM otrzymuje dotychczasową paczkę jako kontekst i prośbę użytkownika. Poprawia wskazane dane, zamiast generować niezależny zestaw od zera. Poprawiona paczka przechodzi walidację i otrzymuje raport dotyczący tej wersji. Każda nowa prośba o zmianę ma własny limit, domyślnie 3 automatyczne rundy naprawcze po pierwszej zmienionej paczce, niezależny od wcześniejszych próśb.
+
+Jeśli mimo tych rund nie uzyskano użytecznej poprawionej paczki, aplikacja informuje o niepowodzeniu i udostępnia poprzednią sprawdzoną wersję z jej raportem, bez przedstawiania jej jako realizacji nowej prośby. Użytkownik może ręcznie wybrać **„Podejmij kolejne 3 próby”**: tylko raz dla danej prośby, zlecając do 3 dodatkowych rund (REQ-078–REQ-079). Jeśli ta seria również nie da użytecznej poprawionej paczki, kończymy naprawy, informujemy o niepowodzeniu i nie pokazujemy ponownie przycisku. Poprzednia sprawdzona paczka z jej raportem pozostaje dostępna. Dodatkowe próby naprawiają ostatnią nieudaną wersję z uwzględnieniem wykrytych w niej błędów, nie zaczynają od poprzedniej sprawdzonej paczki. Po nieudanym pierwszym generowaniu bez użytecznej paczki przycisk dodatkowych 3 prób nie jest dostępny (AC-47). Nie jest to techniczne ponowienie po awarii. Przypisanie prośby i serii do wykonania, przekazanie kontekstu i sprzątanie pozostają do doprecyzowania.
+
+Naruszenia danych uruchamiają automatyczne poprawki, domyślnie do 3 rund dla danej prośby, łącznie dla wszystkich jej tabel i wywołań modeli. Automatyczna poprawka nie odnawia limitu. Błąd techniczny kończy wykonanie bez automatycznego retry lub zmiany wariantu; użytkownik może uruchomić nową próbę.
+
+Uzgodniona walidacja: składnia/format → wstępna zgodność ze schematem i typami → rzeczywisty próbny import do odizolowanego PostgreSQL, obowiązujące relacje i kompletność → dodatkowe reguły biznesowe. Relacje zatwierdzone poza DDL są sprawdzane osobno i obowiązkowe mimo udanego importu. Katalog reguł MVP obejmuje porównanie kolumn, porównanie wartości z progiem, zakresem lub zbiorem, regułę warunkową i ograniczoną regułę sumującą dane między tabelami. Szczegóły ich wykonania i dokładna macierz typów nadal wymagają uzgodnienia.
 
 Architektura ma uwzględniać późniejsze hostowanie, logowanie, wielu użytkowników i skalowanie wykonania. W MVP przygotowujemy granice tych rozszerzeń, ale nie wdrażamy kont ani publicznego hostingu (REQ-066).
 
@@ -24,11 +36,12 @@ Zapisane kierunki to PostgreSQL jako źródło danych i wersji schematów, opcjo
 
 | Dokument | Rola i status |
 | --- | --- |
+| [Plan realizacji MVP](docs/plan_realizacji_mvp.md) | Lokalny plan zaakceptowanych story S1–S9, standard opisów dla juniora i punkt kontynuacji. Zadania i podzadania dopracowujemy kolejno; publikacja na GitHubie odłożona na później. |
 | [Specyfikacja MVP](docs/specyfikacja_mvp.md) | Obowiązujące wymagania, kryteria wykonania i akceptacji oraz jawne otwarte decyzje. Punkt wyjścia do pracy nad aplikacją. |
 | [Rejestr ustaleń architektonicznych](docs/ustalenia_architektoniczne.md) | Zapis wymagań, kierunków LLM i bazy danych oraz statusów propozycji i otwartych decyzji. |
 | [Serwisy i technologie](docs/serwisy_i_technologie.md) | Szczegółowa propozycja funkcji, narzędzi, kontraktów, własności danych, API, testów i lokalnego uruchomienia każdego komponentu. |
 | [Architektura niskopoziomowa — LLD](docs/lld/README.md) | Projekt v0.1: moduły i interfejsy, model danych, kontrakty żądań/odpowiedzi, transakcje, maszyna stanów, anulowanie i okna awarii. |
-| [Walidacja — ustalenia i propozycje](docs/lld/walidacja.md) | Potwierdzone cztery etapy i próbny import; oddzielnie zapisana proponowana macierz PostgreSQL, środowisko i reprezentacja reguł, w tym otwarte pytanie o agregacje. |
+| [Walidacja — ustalenia i propozycje](docs/lld/walidacja.md) | Potwierdzone cztery etapy, próbny import i objęcie MVP ograniczonym rodzajem reguły sumującej dane między tabelami. Szczegóły tej reguły, macierz PostgreSQL, środowisko i reprezentacja reguł pozostają otwarte. |
 | [Architektura ogólna](docs/architektura.md) | Aktualny roboczy szkic odpowiedzialności, własności danych i przepływu, z uzgodnionym rozróżnieniem błędów technicznych i naruszeń danych. Podział procesów pozostaje propozycją. |
 | [Analiza technologii](docs/analiza_technologii.md) | Wstępne porównanie FastAPI, NestJS i Django oraz narzędzi interfejsu, modeli, walidacji i uruchomienia. Rekomendacja do weryfikacji, nie zatwierdzony stos. |
 | [Przepływy funkcjonalne](docs/przeplywy_funkcjonalne.md) | Objaśnienie zachowania opisanego w specyfikacji, bez narzucania architektury i technologii. |
@@ -39,15 +52,33 @@ Zapisane kierunki to PostgreSQL jako źródło danych i wersji schematów, opcjo
 
 W razie rozbieżności obowiązuje specyfikacja MVP. Dokumenty uzupełniające nie rozszerzają jej zakresu samodzielnie.
 
+### Zadania S1 — fundament aplikacji
+
+[Pakiet dziewięciu zadań S1](docs/plan_realizacji_mvp.md#s1--pakiet-zadań-do-przekazania-deweloperowi)
+zawiera opisy, zależności, kryteria i planowane sprawdzenia:
+szkielety aplikacji, konfigurację, lokalny start, bazę i migracje,
+magazyn plików, dostęp, narzędzia testów, sprawdzenie całości
+oraz niezależny monitor z panelem diagnostycznym.
+T1 ma pełny opis do przeglądu; T2–T9 pozostają szkicami z jawnymi
+blokadami przed implementacją. Zadań nie opublikowano na GitHubie.
+
+### Zadania S3 do późniejszego przeniesienia na GitHub
+
+[Pakiet S3 w planie realizacji](docs/plan_realizacji_mvp.md#s3--pakiet-do-późniejszego-przeniesienia-na-github)
+zawiera indeks pięciu opisów zadań, zależności, kryteria ukończenia,
+planowane sprawdzenia i checklistę późniejszego dodania do Issues oraz
+GitHub Project. Opisy pozostają szkicami z jawnymi blokadami,
+nie gotowymi instrukcjami implementacji. Nie zostały jeszcze opublikowane.
+
 ## Wykorzystanie w badaniach
 
-Autor będzie ręcznie zmieniał modele lokalne i płatne modele przez API, prompty oraz organizację procesu, a następnie wykonywał te same zlecenia. Aplikacja zachowa dane i prosty raport potrzebny do późniejszego porównania całego procesu.
+Autor będzie ręcznie zmieniał modele lokalne i płatne modele przez API, prompty oraz organizację procesu, a następnie wykonywał te same zlecenia. Organizacja badań i gromadzenie ich materiałów pozostają poza aplikacją. Generator udostępnia bieżący wynik i prosty raport, bez historii wykonań i archiwum wiadomości.
 
 Realizm danych będzie oceniany poza generatorem, ewentualnie z pomocą LLM i przyszłego osobnego narzędzia. Docelowo aplikacja będzie korzystać z wariantu wybranego na podstawie badań.
 
 ## Jak czytać wymagania
 
-- **Wykonanie zadania:** uzyskano kompletny wynik możliwy do poprawnego importu.
+- **Wykonanie zadania:** uzyskano kompletny, importowalny wynik zgodny ze wszystkimi obowiązującymi relacjami, także zatwierdzonymi poza DDL.
 - **Zgodność biznesowa:** raport opisuje spełnienie poszczególnych dodatkowych reguł; ich naruszenia mogą pozostać w wykonanym zadaniu.
 - **Realizm:** ocena zewnętrzna, nie automatyczna gwarancja generatora.
 

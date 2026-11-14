@@ -14,7 +14,7 @@ Proponowana zasada: **implementujemy zasady generatora, wykorzystujemy gotowe me
 
 Wymienność oznacza brak konieczności zmieniania pozostałych komponentów, jeżeli nowa implementacja zachowuje kontrakt i jego znaczenie. Nie oznacza braku testów, migracji istniejących danych ani automatycznej zgodności funkcjonalnej każdego zamiennika.
 
-Nie wybieramy tutaj języka, frameworka, biblioteki modeli, magazynu aplikacji ani narzędzia orkiestracji. PostgreSQL pozostaje dialektem danych docelowych zgodnie ze specyfikacją, a nie nową decyzją o bazie przechowującej historię.
+Nie wybieramy tutaj języka, frameworka, biblioteki modeli, magazynu aplikacji ani narzędzia orkiestracji. PostgreSQL pozostaje dialektem danych docelowych zgodnie ze specyfikacją, a nie nową decyzją o magazynie stanu roboczego. Historia wykonań jest poza MVP (REQ-072).
 
 Podział na odpowiedzialności nie przesądza liczby mikroserwisów. Gotowy komponent może być biblioteką, procesem lokalnym albo usługą zewnętrzną. „Zewnętrzny” nie musi oznaczać płatnego SaaS ani wysyłania danych poza komputer.
 
@@ -30,10 +30,10 @@ Później uzgodniono lokalny interfejs webowy, gotowy SQL/CSV przygotowywany prz
 | --- | --- | --- |
 | Kontekst projektu | Wersje DDL, reguł i zatwierdzonych interpretacji; odróżnienie jawnych relacji od propozycji; jawne ograniczenia obsługi. | REQ-009–REQ-019 |
 | Przygotowanie zlecenia | Przebieg doprecyzowań i zatwierdzania zakresu, liczebności wszystkich potrzebnych tabel, reguł i formatu. Model może proponować, ale nie zastępuje wymaganego zatwierdzenia. | REQ-020–REQ-026 |
-| Migawka wymagań | Niezmienny zapis wymagań użytych w wykonaniu; ponowienie dawnego zadania bez zastępowania go aktualnym projektem. | REQ-026, REQ-053, REQ-058–REQ-059 |
+| Migawka wymagań | Niezmienny zapis wymagań użytych w bieżącym wykonaniu; bez odtwarzania dawnych zleceń z archiwum. | REQ-026, REQ-059, REQ-072 |
 | Sterowanie wykonaniem | Stany i przejścia procesu, uruchamianie etapów, globalny licznik rund poprawek, obsługa anulowania i błędów. Nie piszemy uniwersalnego silnika workflow. | REQ-032–REQ-042 |
-| Interpretacja wyniku | Wykonanie zależy od kompletności i potwierdzonej importowalności; dodatkowe naruszenia biznesowe i realizm są odrębne. Niewykonane sprawdzenie nie jest sukcesem. | REQ-027–REQ-031, REQ-048–REQ-051 |
-| Kandydaci i historia | Niezmienne wersje wyników, raport powiązany z konkretną wersją, zachowanie wcześniejszego użytecznego kandydata. Polityka wyboru między kilkoma kandydatami pozostaje otwarta. | REQ-038–REQ-040, REQ-052–REQ-059; OD-03 |
+| Interpretacja wyniku | Wykonanie zależy od kompletności, potwierdzonej importowalności i zgodności wszystkich obowiązujących relacji; dodatkowe naruszenia biznesowe i realizm są odrębne. Niewykonane sprawdzenie nie jest sukcesem. | REQ-012, REQ-027–REQ-031, REQ-048–REQ-051 |
+| Kandydat i raport | Raport dotyczy konkretnej wersji; ochrona najnowszego użytecznego kandydata podczas poprawek, bez archiwum wszystkich wersji. Zwracamy wyłącznie najnowszego użytecznego kandydata, bez rankingu jakości. | REQ-038–REQ-040, REQ-047, REQ-072; OD-03 rozstrzygnięte, AC-36 |
 | Raport badawczy | Powiązanie wymagań, rzeczywistego wariantu, kandydatów, sprawdzeń, rund i pomiarów; brak pomiaru odróżniony od zera. | REQ-047–REQ-065 |
 | Granice przyszłej wieloużytkownikowości | Kontekst lokalnego właściciela, własność projektów i granica kontroli dostępu; bez rejestracji, sesji i obsługi wielu kont w MVP. | REQ-066 |
 | Scenariusze testowe produktu | Oczekiwane zachowanie, przypadki brzegowe i testy zgodności wymiennych implementacji. Narzędzia do uruchamiania testów bierzemy gotowe. | AC-01–AC-32 |
@@ -52,9 +52,9 @@ Nie proponujemy zastąpienia tego rdzenia gotową platformą agentową. Platform
 | Kompletność | Gotowe odczyty danych, liczenie rekordów i operacje na zbiorach. | Porównanie z zatwierdzonym planem dla całej paczki, także wykrywanie brakujących tabel i nieuzgodnionego zakresu. |
 | Reguły biznesowe | Gotowe operacje porównywania, agregacji lub wykonywania zapytań; ewentualnie biblioteka walidacyjna. | Zatwierdzona definicja sprawdzenia, jego przygotowanie w obsługiwanym zakresie, jednostka naruszenia i raport. Nie obiecujemy automatycznej obsługi dowolnego tekstowego wymagania. |
 | Eksport | Biblioteki odczytu CSV do sprawdzeń, zapisu zawartości i archiwizacji. | Profil eksportu, wyodrębnienie gotowego SQL/CSV modelu, przypisanie plików do tabel, kolejność importu i powiązanie wyniku z kandydatem oraz raportem. Bez cichego poprawiania danych. |
-| Trwały zapis | Gotowy silnik przechowywania, sterownik i narzędzia migracji. | Operacje zapisu i odczytu projektu, wykonania oraz artefaktów; migawki i niezmienność historii. Nie budujemy własnej bazy ani uniwersalnego ORM. |
+| Zapis danych | Gotowy silnik przechowywania, sterownik i narzędzia migracji. | Zapisane projekty oraz bieżący czat, stan i artefakty wykonania. Po nowym czacie lub pełnym zamknięciu aplikacji nie wracamy do starej rozmowy i plików (REQ-074); fizyczne sprzątanie wymaga OD-09. Nie budujemy archiwum, własnej bazy ani uniwersalnego ORM. |
 | Interfejs | Gotowe komponenty formularzy, list, przesyłania i pobierania plików. | Ekrany i interakcje przygotowania projektu, zatwierdzania zlecenia, śledzenia wykonania i odbioru wyniku. |
-| Diagnostyka | Biblioteki logowania, pomiaru czasu i ewentualnego śledzenia komunikacji. | Identyfikatory wykonania, rundy, wywołania i kandydata oraz definicja pomiarów. Logi techniczne nie zastępują wymaganej historii badawczej. |
+| Diagnostyka | Biblioteki logowania i pomiaru czasu. | Identyfikatory bieżącego wykonania, rundy i kandydata oraz dostępne pomiary raportu. Nie tworzymy historii badawczej ani archiwum pełnych wiadomości. |
 | Komunikacja między usługami | Gotowy transport i biblioteki klientów, jeśli granica rzeczywiście jest sieciowa. | Kontrakty, wersjonowanie, korelacja operacji, deduplikacja skutków i reakcja na częściowe awarie. Nie wybieramy jeszcze brokera ani protokołu. |
 | Logowanie — późniejsze rozszerzenie | Proponowana integracja gotowego rozwiązania tożsamości, dopiero po MVP. | Teraz granica źródła kontekstu i kontroli dostępu; później mapowanie tożsamości oraz autoryzacja dostępu do naszych zasobów. |
 
@@ -66,11 +66,11 @@ Gotowa biblioteka nie zwalnia nas z konfiguracji i testów. Nie zakładamy równ
 
 21 października 2026 wybrano rzeczywisty próbny import zamiast samej analizy statycznej. Wstępna kontrola schematu i typów poprzedza import, ale nie odtwarza pełnej semantyki PostgreSQL. Gotowy silnik egzekwuje zadeklarowane ograniczenia, natomiast nasz adapter odpowiada za warunki próby i poprawność wniosku [S1].
 
-Udany import nie dowodzi kompletności planu, spełnienia wszystkich dodatkowych reguł ani realizmu. Obsługa przez silnik nie rozszerza automatycznie zakresu generatora: nadal potrzebujemy macierzy OD-01.
+Udany import nie dowodzi kompletności planu, zgodności relacji zatwierdzonych poza DDL, spełnienia wszystkich dodatkowych reguł ani realizmu. Uzgodnione 14 listopada 2026: relacje zatwierdzone poza DDL sprawdzamy osobno po imporcie; ich naruszenie blokuje sukces zadania, ale nie zmienia wyniku importu ani oryginalnego DDL (REQ-012, REQ-027, AC-34). Obsługa przez silnik nie rozszerza automatycznie zakresu generatora: nadal potrzebujemy macierzy OD-01.
 
 Dla wybranej metody proponujemy następujące szczegóły realizacji:
 
-- osobne środowisko walidacyjne, bez dostępu do bazy z historią aplikacji i baz użytkownika;
+- osobne środowisko walidacyjne, bez dostępu do danych aplikacji i baz użytkownika;
 - ograniczone uprawnienia, czas i zasoby oraz jawna lista dozwolonych konstrukcji DDL, instrukcji i wyrażeń; nie uruchamiamy dowolnego SQL od użytkownika lub modelu;
 - w szczególności brak niekontrolowanego dostępu do plików i uruchamiania programów przez SQL; mechanizmy uprawnień oraz `COPY` wymagają świadomej konfiguracji [S2, S3];
 - import rzeczywistych artefaktów wybranego formatu według tego samego profilu, który otrzyma użytkownik;
@@ -134,7 +134,7 @@ Przed wyborem konkretnego produktu trzeba sprawdzić:
 1. Pokrycie naszego zakresu, także błędów i przypadków nieobsługiwanych.
 2. Nakład integracji, konfiguracji, testów i późniejszej aktualizacji, a nie tylko rozmiar przykładowego wywołania.
 3. Możliwość odizolowania jego typów i konfiguracji za adapterem.
-4. Dostęp do wiadomości, błędów, identyfikatorów i pomiarów wymaganych w historii.
+4. Dostęp do odpowiedzi, błędów, identyfikatorów i pomiarów potrzebnych bieżącemu wykonaniu i raportowi, bez wymogu archiwizacji.
 5. Możliwość wyłączenia technicznych retry i automatycznych fallbacków po błędzie zgodnie z REQ-070 oraz kontrolowania skracania kontekstu i innych zachowań zmieniających przebieg badania.
 6. Licencję, utrzymanie, wersjonowanie, wymagania uruchomienia oraz przetwarzanie danych i poświadczeń.
 7. Przejście tych samych testów kontraktowych co inne implementacje.
@@ -145,7 +145,7 @@ Nie zakładamy z góry, że agregator modeli jest prostszy od kilku oficjalnych 
 
 1. Uzgodnić podstawowe kontrakty i zakres sprawdzeń, szczególnie OD-01 i OD-02.
 2. Przygotować testy rdzenia na kontrolowanym generatorze i walidatorze, bez kosztownych wywołań modeli.
-3. Zbudować minimalny przepływ: zatwierdzone zlecenie → kandydat → rzeczywista walidacja → raport i historia.
+3. Zbudować minimalny przepływ: zatwierdzone zlecenie → kandydat → rzeczywista walidacja → wynik i raport, bez historii.
 4. Podłączyć jeden rzeczywisty wariant modelu i jeden adapter trwałego zapisu.
 5. Dodać ograniczone poprawki i test zachowania wcześniejszego użytecznego kandydata.
 6. Zweryfikować granicę modeli na kolejnym rzeczywiście potrzebnym adapterze; pozostałe implementacje sprawdzać przez wspólne testy kontraktowe.
@@ -154,7 +154,11 @@ Granice osobnych procesów i wdrożeń ustalimy osobno. Naturalnymi kandydatami 
 
 ## 9. Nierozstrzygnięte decyzje
 
-Ten podział nie zamyka pozostałych szczegółów OD-01–OD-12 ze specyfikacji. Metodę próbnego importu już uzgodniono; otwarte pozostają szczegóły środowiska, wybór kandydata, wykonywanie reguł, profil eksportu, wartości timeoutów i raportowanie nieudanych operacji, dostępność danych po anulowaniu, retencja oraz szczegóły organizacji wariantów. Brak automatycznego retry po błędzie technicznym jest już uzgodniony. [Projekt walidacji](lld/walidacja.md) zawiera także niezatwierdzoną macierz PostgreSQL i pytanie o agregacje.
+Ten podział nie zamyka pozostałych szczegółów OD-01–OD-12 ze specyfikacji. Metodę próbnego importu już uzgodniono; otwarte pozostają szczegóły środowiska, wykonywanie reguł, profil eksportu, wartości timeoutów i raportowanie nieudanych operacji, dostępność częściowych lub niesprawdzonych artefaktów po przerwaniu, retencja oraz szczegóły organizacji wariantów. Uzgodniono brak automatycznego retry po błędzie technicznym oraz możliwość pobrania wcześniej zapisanego użytecznego kandydata z raportem po anulowaniu lub awarii, bez zmiany statusu wykonania (REQ-047, AC-35; częściowe rozstrzygnięcie OD-08). OD-03 jest zamknięte: zwracamy wyłącznie najnowszego użytecznego kandydata (REQ-039, AC-36). [Projekt walidacji](lld/walidacja.md) zawiera także niezatwierdzoną macierz PostgreSQL oraz potwierdzony 14 listopada 2026 zakres REQ-071: ograniczony rodzaj reguły sumującej dane między tabelami, ze szczegółami nadal do uzgodnienia.
+
+Doprecyzowanie w specyfikacji v1.13: głównym widokiem jest czat z wyborem projektu i kolejnymi poleceniami (REQ-073). Przy zmianie danych LLM otrzymuje poprzednią paczkę i nowe polecenie; poprawiona paczka podlega walidacji (REQ-076). Każda nowa prośba ma własny limit napraw, domyślnie 3 rundy po pierwszym kandydacie (REQ-033–REQ-034). Po nieudanej zmianie zachowujemy poprzednią sprawdzoną wersję z jej raportem i komunikatem o niepowodzeniu; dodatkowe 3 rundy wymagają ręcznej akcji użytkownika i naprawiają ostatniego nieudanego kandydata z uwzględnieniem wykrytych błędów (REQ-078–REQ-079). Pobranie po przerwaniu dotyczy nadal dostępnej rozmowy; zdarzenia z REQ-074, także odświeżenie i zamknięcie strony, kończą dostęp do starego czatu i plików oraz uruchamiają anulowanie trwającego wykonania (REQ-077). Ostrzeżenie przed odświeżeniem lub zamknięciem podlega ograniczeniom przeglądarki; rezygnacja zachowuje dane i nie anuluje pracy (REQ-075).
+
+Otwarte pozostają techniczne wykrycie wyjścia i przekazanie anulowania, moment potwierdzenia zatrzymania, mechanizm zakończenia dostępu, fizyczne sprzątanie oraz przypisanie prośby i dodatkowej serii do wykonania oraz liczników i kontrakt kontekstu. Nie są to decyzje do samodzielnego podjęcia podczas implementacji.
 
 Uzgodniono, że model zwraca gotowy SQL/CSV. Nie budujemy przebiegu opartego na deterministycznym generowaniu tego formatu z pośrednich rekordów modelu. W ramach OD-10 pozostaje organizacja wariantów i dokładny kontrakt przekazania plików. Pozytywny raport i eksport muszą dotyczyć tych samych danych w rzeczywiście dostarczanym formacie.
 
