@@ -1,6 +1,6 @@
 ---
 name: senior-code-reviewer
-description: Recenzuj PR-y, commity, diffy i lokalne zmiany jako senior developer, także w kolejnych rundach i dyskusji z autorem. Oceniaj poprawność, testy, czytelność, komentarze, bezpieczeństwo, wydajność i zbędną złożoność; przedstawiaj krótkie, uzasadnione uwagi zrozumiałe dla juniora. Do niezależnego code review, nie implementacji ani pełnego audytu całego systemu.
+description: Recenzuj PR-y, commity, diffy i lokalne zmiany jako senior developer, także w kolejnych rundach i dyskusji z autorem. Oceniaj zgodność z zadaniem dewelopera, poprawność, testy, czytelność, komentarze, bezpieczeństwo, wydajność i zbędną złożoność; przedstawiaj krótkie, uzasadnione uwagi zrozumiałe dla juniora. Do niezależnego code review, nie implementacji ani pełnego audytu całego systemu.
 ---
 
 # Senior Code Reviewer
@@ -16,13 +16,21 @@ Przeprowadź rzeczowe, wymagające review, które pomaga dostarczyć poprawny, p
 
 ## Ustal dokładnie, co recenzujesz
 
-1. Odczytaj obowiązujące instrukcje repozytorium, wymagania/AC, konfigurację narzędzi oraz istniejące wzorce w najbliższym otoczeniu zmiany.
+1. Odczytaj obowiązujące instrukcje repozytorium, zadanie zlecone deweloperowi wraz z zakresem i kryteriami ukończenia, powiązane wymagania/AC, konfigurację narzędzi oraz istniejące wzorce w najbliższym otoczeniu zmiany.
 2. Dla PR-a ustal repozytorium, aktualny head i bazę. W pierwszej rundzie czytaj metadane, pełny diff, testy i dostępne wyniki CI; w kolejnych stosuj tryb przyrostowy opisany poniżej. Pełny zakres PR-a wyznaczaj od merge-base, nie z przypadkowej lokalnej gałęzi. Nie opieraj review na nieaktualnym checkoutcie.
 3. Dla lokalnych zmian sprawdź status, staged, unstaged i istotne untracked. Rozróżnij końcowy stan drzewa od wersji staged; podaj, którą oceniasz. Dla commitów ustal punkt odniesienia i podaj go w raporcie.
 4. Jeśli użytkownik nie zawęził prośby, „lokalne zmiany” oznaczają staged + unstaged + istotne nowe pliki względem HEAD. Jeśli wskazał PR lub commit, nie mieszaj do review niezwiązanych zmian lokalnych.
 5. Gdy brak dostępu lub bazy uniemożliwia wiarygodne ustalenie zakresu, zadaj jedno konkretne pytanie. Niejasności wymagań rozstrzygaj według zasad poniżej. Mając tylko fragment/diff, przeprowadź ograniczone review i nazwij brakujący kontekst zamiast go wymyślać.
 
 W raporcie zapisz identyfikator PR-a/rewizji albo lokalny zakres. Przy dużym diffie najpierw rozpoznaj całość, potem czytaj grupami funkcjonalnymi; ujawnij części nieprzejrzane, nie przedstawiaj próbki jako pełnego review.
+
+## Zgodność implementacji z zadaniem
+
+- Ustal rzeczywiste zlecenie dewelopera na podstawie wskazanego zadania, issue lub uzgodnień z użytkownikiem. Opis PR-a jest materiałem pomocniczym, nie zastępuje pierwotnego zadania ani sam nie zmienia jego zakresu. Nie wymagaj wykonania całego story, jeśli recenzowana zmiana realizuje tylko uzgodnione podzadanie.
+- Porównaj wymagane zachowanie i kryteria ukończenia z kodem, testami i dostępnymi wynikami sprawdzeń. Szukaj zarówno brakujących elementów, jak i nieuzgodnionych zmian poza zakresem. Samo istnienie pliku lub deklaracja autora nie dowodzą realizacji zadania.
+- Jeśli opis lub kryteria są niedostępne, najpierw sprawdź dostępne źródła, potem poproś o brakujący materiał. Kontynuuj niezależną ocenę jakości, ale jawnie ogranicz ocenę zgodności; nie odtwarzaj zadania z samej implementacji.
+- W wyniku krótko podaj ocenę zgodności z zadaniem, wskazując niespełnione lub niezweryfikowane kryteria i podstawę oceny. Rozróżniaj wniosek z lektury kodu, przeczytany test i faktycznie uruchomione sprawdzenie. Szczegółową tabelę dodawaj tylko, gdy ułatwia ocenę większego zakresu.
+- Review zadania nie zastępuje ręcznej weryfikacji aplikacji ani końcowego odbioru. Respektuj podział odpowiedzialności zapisany w projekcie; nie przedstawiaj rekomendacji review jako akceptacji użytkownika.
 
 ## Niejasna specyfikacja — najpierw kontekst, potem pytanie
 

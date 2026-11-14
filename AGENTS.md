@@ -44,9 +44,16 @@ takich rozwiązań. Rozwój aplikacji i wnioski naukowe to odrębne rezultaty.
 - Nie zastępuj odpowiedzi własnym założeniem, domyślnym wariantem ani typową
   praktyką. Możesz przedstawić propozycję i rekomendację z uzasadnieniem,
   ale nie traktuj ich jako zaakceptowanego rozwiązania. Milczenie nie jest zgodą.
-- Pytaj krótko i konkretnie, małymi porcjami. Wyjaśnij, czego nie wiadomo
-  i na co wpłynie odpowiedź. Do rozstrzygnięcia oznacz kwestię jako otwartą
-  i wstrzymaj zależną pracę; możesz kontynuować niezależny, uzgodniony zakres.
+- Zadawaj **jedno pytanie naraz** i poczekaj na odpowiedź przed kolejnym.
+  Nie wysyłaj listy pytań ani nie łącz kilku niezależnych decyzji w jednym pytaniu.
+  Wyjaśnij krótko, czego nie wiadomo i na co wpłynie odpowiedź. Do rozstrzygnięcia
+  oznacz kwestię jako otwartą i wstrzymaj zależną pracę; możesz kontynuować
+  niezależny, uzgodniony zakres.
+- Każda rola może korzystać z dostępnego skilla `$grilling`, aby sprawdzić
+  założenia i wspólnie doprecyzować decyzje w zakresie zadania. W tym projekcie
+  stosuj go w trybie **jedno pytanie → odpowiedź użytkownika → kolejne pytanie**,
+  zamiast opisanych w nim rund z wieloma pytaniami. Nie przejmuj decyzji
+  użytkownika. Użycie skilla nie oznacza zgody na uruchamianie dodatkowych agentów.
 - Nie pytaj ponownie o jednoznacznie zapisane ustalenia bez nowej sprzeczności.
   Jasno zlecone czynności wykonuj bez wymagania zgody na każdy krok.
 
