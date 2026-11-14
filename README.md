@@ -34,6 +34,13 @@ Zapisane kierunki to PostgreSQL jako źródło danych i wersji schematów, opcjo
 
 ## Dokumentacja
 
+**Design system v0.1 — zaakceptowany fundament wizualny:**
+[zasady dla dewelopera](docs/ui/design-system.md),
+[galeria komponentów](docs/ui/design-system.html) i [katalog ekranów](docs/ui/index.html).
+Akceptacja z 14 listopada 2026 obejmuje kierunek wizualny oraz istniejące tokeny
+i komponenty light/dark. Demonstracyjny czat jest wzorcem wyglądu, nie implementacją
+aplikacji ani akceptacją wszystkich przepływów produktu.
+
 | Dokument | Rola i status |
 | --- | --- |
 | [Plan realizacji MVP](docs/plan_realizacji_mvp.md) | Lokalny plan zaakceptowanych story S1–S9, standard opisów dla juniora i punkt kontynuacji. Zadania i podzadania dopracowujemy kolejno; publikacja na GitHubie odłożona na później. |

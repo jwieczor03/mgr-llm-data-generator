@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pl" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Czat · Generator danych — makieta</title>
+  <link rel="stylesheet" href="../../shared/components.css">
+  <script src="../../shared/preview.js" defer></script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 4 16 4 16 0V5M4 12v7c0 4 16 4 16 0v-7"/></symbol>
+  <symbol id="table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M10 10v10"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+  <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></symbol>
+</svg>
+<a class="skip-link" href="#main">Przejdź do rozmowy</a>
+<div class="preview-bar">
+  <span>MAKIETA · ITERACJA 02 <span aria-hidden="true">/</span> Dane demonstracyjne</span>
+  <nav class="preview-links" aria-label="Narzędzia makiety"><a href="../../index.html">Katalog</a><a href="../../design-system.html">Komponenty</a><button class="button" data-theme-toggle>◐ Ciemny</button></nav>
+</div>
+<div class="workspace">
+  <aside class="sidebar" aria-label="Kontekst projektu demonstracyjnego">
+    <div class="brand row"><span class="brand-mark"><svg class="icon"><use href="#database"/></svg></span>Generator danych</div>
+    <button class="button tonal" data-new-chat><svg class="icon" aria-hidden="true"><use href="#plus"/></svg>Nowy czat</button>
+    <section>
+      <div class="eyebrow">Bieżący projekt</div>
+      <div class="project"><div class="row"><svg class="icon" aria-hidden="true"><use href="#database"/></svg><strong>Sklep internetowy</strong></div><p class="small muted" style="margin-top:7px">PostgreSQL · schemat v1</p></div>
+      <p class="small muted">Kontekst demonstracyjny, bez zmiany projektu w tej makiecie.</p>
+    </section>
+    <section>
+      <div class="row between"><div class="eyebrow">Tabele schematu</div><span class="small muted">4</span></div>
+      <div class="table-list">
+        <div class="table-item"><span><svg class="icon" aria-hidden="true"><use href="#table"/></svg>customers</span></div>
+        <div class="table-item"><span><svg class="icon" aria-hidden="true"><use href="#table"/></svg>products</span></div>
+        <div class="table-item"><span><svg class="icon" aria-hidden="true"><use href="#table"/></svg>orders</span></div>
+        <div class="table-item"><span><svg class="icon" aria-hidden="true"><use href="#table"/></svg>order_items</span></div>
+      </div>
+    </section>
+    <section>
+      <div class="row between"><div class="eyebrow">Reguły projektu</div><span class="small muted">3</span></div>
+      <p class="rule">Data dostawy późniejsza niż data zakupu.</p>
+      <p class="rule">Cena produktu większa od zera.</p>
+      <p class="rule">Wartość zamówienia równa sumie jego pozycji.</p>
+    </section>
+    <div class="session-note"><div class="row"><svg class="icon" aria-hidden="true"><use href="#clock"/></svg><strong>Tylko bieżąca rozmowa</strong></div><p style="margin-top:8px">W aplikacji nowy czat, odświeżenie lub zamknięcie strony kończy dostęp do rozmowy i plików. Pobierz potrzebny wynik.</p></div>
+  </aside>
+  <main class="main" id="main">
+    <header class="app-header row between">
+      <div class="row"><strong data-chat-state>Bieżący czat</strong><span class="muted small header-label">Sklep internetowy</span></div>
+      <span class="badge desktop-only">Podgląd projektu</span><button class="button quiet mobile-only" data-new-chat>＋ Nowy czat</button>
+    </header>
+    <div class="conversation">
+      <div class="conversation-intro"><h1 data-intro-title><span class="intro-accent">Twoje dane.</span> Gotowe do testów.</h1><p class="muted" data-intro-text>Od schematu i reguł do danych, które możesz zaimportować.</p></div>
+      <div data-messages>
+        <div class="message-user"><div class="message-label">Ty</div><p>Przygotuj 200 zamówień z klientami, produktami i pozycjami zamówień. Użyj polskich danych. Wynik jako SQL.</p></div>
+        <div class="plan-summary"><svg class="icon" aria-hidden="true"><use href="#check"/></svg><span>Zakres zatwierdzony w rozmowie</span><span aria-hidden="true">·</span><span>4 tabele</span><span aria-hidden="true">·</span><span>880 rekordów</span><span aria-hidden="true">·</span><span>SQL INSERT</span></div>
+        <article class="assistant" aria-label="Demonstracyjna odpowiedź generatora">
+          <div class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#database"/></svg></div>
+          <div>
+            <div class="message-label">Generator <span class="muted" style="font-weight:400">/ przykład odpowiedzi</span></div>
+            <p class="assistant-text">Paczka spełnia warunki importu i zawiera uzgodnioną liczbę rekordów. W dodatkowych regułach biznesowych pozostały naruszenia.</p>
+            <section class="card" aria-labelledby="result-title">
+              <div class="result-heading">
+                <div class="row between"><h2 id="result-title">Wynik generowania</h2><span class="badge success">✓ Wykonane</span></div>
+                <p class="small muted">SQL INSERT <span aria-hidden="true">·</span> 4 powiązane tabele <span aria-hidden="true">·</span> wynik demonstracyjny</p>
+              </div>
+              <table class="result-table"><caption class="small muted" style="text-align:left;padding:0 24px 10px">Liczebności: zatwierdzony plan i wynik</caption><thead><tr><th scope="col">Tabela</th><th scope="col">Plan</th><th scope="col">Wynik</th></tr></thead><tbody>
+                <tr><td><code>customers</code></td><td>50</td><td class="check-text">50 ✓</td></tr>
+                <tr><td><code>products</code></td><td>30</td><td class="check-text">30 ✓</td></tr>
+                <tr><td><code>orders</code></td><td>200</td><td class="check-text">200 ✓</td></tr>
+                <tr><td><code>order_items</code></td><td>600</td><td class="check-text">600 ✓</td></tr>
+              </tbody></table>
+              <div class="checks"><span>✓ Kompletność</span><span>✓ Próbny import PostgreSQL</span><span>✓ Obowiązujące relacje</span></div>
+              <div class="business-note"><strong>△ Dodatkowe reguły: 3 naruszenia dat dostawy</strong><p>Pozostały po 3 z 3 rund poprawek. Nie blokują importu. Szczegóły znajdziesz w raporcie.</p></div>
+              <div class="result-actions row between"><button class="button primary" data-download-demo><svg class="icon" aria-hidden="true"><use href="#download"/></svg>Pobierz przykład .sql</button><button class="button tonal" data-report-button aria-expanded="false" aria-controls="demo-report">Raport demonstracyjny <span class="disclosure-arrow" aria-hidden="true">⌄</span></button></div>
+            </section>
+            <details class="report" data-report id="demo-report"><summary>Szczegóły sprawdzeń i ograniczenia</summary><div class="report-content">
+              <strong>Raport demonstracyjny — żadnego sprawdzenia nie wykonano</strong>
+              <p>Stan i liczby poniżej ilustrują proponowaną prezentację raportu, nie wynik działania generatora.</p>
+              <ul><li>Kompletność: 880 z 880 rekordów; zakres podano w tabeli.</li><li>Importowalność: w scenariuszu potwierdzona próbnym importem PostgreSQL.</li><li>Relacje: w scenariuszu wszystkie obowiązujące powiązania poprawne.</li><li>Data dostawy: 3 naruszenia wśród 200 zamówień, np. zamówienie #42: dostawa 11.10.2026, zakup 12.10.2026.</li><li>Dodatnia cena: 0 naruszeń wśród 30 produktów.</li><li>Suma pozycji: 0 naruszeń wśród 200 zamówień; iloczyny pozycji zaokrąglane do 2 miejsc, przy połowie od zera, następnie sumowane.</li></ul>
+              <p>Automatyczne rundy naprawcze: 3 / 3. Realizm danych: nieoceniany automatycznie. Model, czas, tokeny i koszt: brak pomiarów — to makieta.</p>
+              <p>Przycisk pobiera wyłącznie komentarz opisujący demonstrację, nie kompletny wynik SQL. Format eksportu raportu pozostaje otwarty w specyfikacji; ta makieta go nie ustala.</p>
+            </div></details>
+          </div>
+        </article>
+      </div>
+      <form class="composer" data-composer novalidate>
+        <label for="prompt">Kontynuuj rozmowę</label>
+        <textarea id="prompt" name="prompt" placeholder="Opisz, co chcesz zmienić w danych…" aria-describedby="composer-help feedback"></textarea>
+        <div class="row between"><span class="small muted" id="composer-help">Symulacja · bez połączenia z modelem</span><button class="button primary" type="submit">Wyślij <svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+      </form>
+      <p class="feedback" id="feedback" role="status" data-feedback></p>
+      <p class="footer-note">Wyniki na ekranie są fikcyjne. Makieta służy do oceny wyglądu, nie poprawności danych.</p>
+    </div>
+  </main>
+</div>
+<dialog data-new-chat-dialog aria-labelledby="dialog-title" aria-describedby="dialog-text">
+  <h2 id="dialog-title">Rozpocząć nowy czat w podglądzie?</h2>
+  <p class="muted" id="dialog-text">Ukryjesz demonstracyjną rozmowę i jej wynik. Projekt pozostanie wybrany. W tej makiecie odświeżenie przywraca przykład; docelowa aplikacja nie przywraca starej rozmowy.</p>
+  <div class="row wrap"><button class="button" data-stay autofocus>Zostań w rozmowie</button><button class="button primary" data-confirm-new>Rozpocznij nowy czat</button></div>
+</dialog>
+</body></html>
