@@ -54,7 +54,8 @@ aplikacji ani akceptacją wszystkich przepływów produktu.
 | [Przepływy funkcjonalne](docs/przeplywy_funkcjonalne.md) | Objaśnienie zachowania opisanego w specyfikacji, bez narzucania architektury i technologii. |
 | [Podział implementacji](docs/podzial_implementacji.md) | Robocza propozycja: własna logika produktu, gotowe mechanizmy i wymienne adaptery. Nie zatwierdza technologii ani liczby mikroserwisów. |
 | [Przygotowanie do hostowania](docs/przygotowanie_do_hostowania.md) | Uzgodniony kierunek rozwoju i proponowane granice przyszłego logowania, izolacji danych i skalowania; bez wdrażania tych funkcji w MVP. |
-| [Plan badań](docs/plan_badan.md) | Robocze pytania badawcze, proponowane warianty i zachowane hipotezy. Nie jest listą zatwierdzonych eksperymentów ani dodatkowymi wymaganiami MVP. |
+| [Plan badań](docs/plan_badan.md) | Uzgodniony cel, główne pytanie, ramy porównania modeli i procesów oraz rekomendacje oparte na poprawności, czasie i koszcie. Pytania szczegółowe są robocze, protokół odłożono do czasu uzyskania aplikacji. Nie rozszerza MVP. |
+| [Stan badań i literatura](badania/stan-badan.md) | Osobny obszar badawczy: ocena koncepcji pracy magisterskiej, podobne publikacje i otwarte decyzje. Nie zastępuje planu ani nie zatwierdza protokołu. |
 | [Archiwum koncepcji](docs/archiwum/README.md) | Historyczne materiały zachowane do wglądu. Nie stanowią aktualnych wymagań ani wyborów technologicznych. |
 
 W razie rozbieżności obowiązuje specyfikacja MVP. Dokumenty uzupełniające nie rozszerzają jej zakresu samodzielnie.
@@ -79,9 +80,27 @@ nie gotowymi instrukcjami implementacji. Nie zostały jeszcze opublikowane.
 
 ## Wykorzystanie w badaniach
 
-Autor będzie ręcznie zmieniał modele lokalne i płatne modele przez API, prompty oraz organizację procesu, a następnie wykonywał te same zlecenia. Organizacja badań i gromadzenie ich materiałów pozostają poza aplikacją. Generator udostępnia bieżący wynik i prosty raport, bez historii wykonań i archiwum wiadomości.
+W aktualnie doprecyzowywanym planie porównujemy również generowanie z aplikacją
+z bezpośrednim użyciem LLM bez aplikacji. Wariant odniesienia otrzymuje
+ten sam pełny DDL, oryginalne polecenie i reguły, bez dodatkowego kontekstu
+aplikacji. Wykonuje jedno wywołanie bez poprawek, a wynik jest później
+oceniany walidatorem bez przekazywania błędów modelowi. Pozostałe ustalenia zawiera
+[plan badań](docs/plan_badan.md).
 
-Realizm danych będzie oceniany poza generatorem, ewentualnie z pomocą LLM i przyszłego osobnego narzędzia. Docelowo aplikacja będzie korzystać z wariantu wybranego na podstawie badań.
+Ten sam model porównujemy bez aplikacji i w jej procesie bez podziału na
+agentów. Badamy też podział na planistę, wykonawcę i reviewera tego samego
+modelu. Reviewer ocenia, a wykonawca poprawia dane w ograniczonej pętli.
+
+Autor będzie ręcznie zmieniał modele dostępne przez API lub uruchamiane lokalnie, prompty oraz organizację procesu, a następnie wykonywał te same zlecenia. Modele o otwartych wagach mogą być badane przez API albo lokalnie. Organizacja badań i gromadzenie ich materiałów pozostają poza aplikacją. Generator udostępnia bieżący wynik i prosty raport, bez historii wykonań i archiwum wiadomości.
+
+Główna ocena badawcza obejmuje poprawność, błędy, czas i koszt. Realizm
+danych i rozumienie zadania mogą być opisane jako obserwacje poboczne;
+nie planujemy obowiązkowej osobnej ewaluacji realizmu. Docelowo aplikacja
+będzie korzystać z wariantu wybranego na podstawie badań.
+Wynikiem pracy mają być rekomendacje przy różnych priorytetach i opis
+kompromisów między poprawnością, czasem i kosztem, nie jeden zbiorczy ranking.
+Prompty są częścią przygotowania wariantów, bez osobnego badania technik
+promptowania w głównym zakresie.
 
 ## Jak czytać wymagania
 
