@@ -3429,3 +3429,11 @@ Szczegółowe dokumenty modelu danych, kontraktów API i cyklu wykonania
 wymagają ponownego odczytu dla wybranego story. Nie przeprowadzono ich
 pełnego przeglądu implementacyjnego ani aktualnej weryfikacji bibliotek.
 Archiwum koncepcji nie było podstawą mapy story.
+
+### Kontrole PR — zakres infrastrukturalny S1-T7
+
+Przygotowano osobne workflow GitHub Actions dla istniejących testów pytest,
+budowania frontendu i kontroli bezpieczeństwa: audytu zależności, wykrywania
+sekretów i analizy CodeQL. Opis obsługi znajduje się w README. Ten zakres nie
+zamyka S1-T7: wybór pozostałych narzędzi i środowiska testów integracyjnych
+pozostaje otwarty. Działanie workflow na GitHubie wymaga sprawdzenia po publikacji.

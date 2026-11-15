@@ -1,0 +1,70 @@
+name: Security
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  python-dependencies:
+    name: Python dependencies / ${{ matrix.service }}
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [application-api, generation-service, validation-service]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.11.1'
+          python-version: '3.14'
+      - name: Export locked dependencies including development tools
+        run: uv export --locked --project "services/${{ matrix.service }}" --no-emit-project --format requirements-txt --output-file "${RUNNER_TEMP}/requirements.txt"
+      - name: Audit known vulnerabilities
+        run: uvx --python 3.14 --from pip-audit==2.9.0 pip-audit --strict -r "${RUNNER_TEMP}/requirements.txt"
+  npm-dependencies:
+    name: npm dependencies
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: '26'
+      - run: npm audit --prefix apps/web --audit-level=high
+  secrets:
+    name: Secrets in changes
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan Git commits with Gitleaks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          args=()
+          if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
+            args+=("--log-opts=${BASE_SHA}..${HEAD_SHA}")
+          fi
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
+            ghcr.io/gitleaks/gitleaks@sha256:e4037a313035c932d6b14b934edc5da9bbf6212b52da0b94870e1448ed4b8e2b \
+            git --redact "${args[@]}" /src
