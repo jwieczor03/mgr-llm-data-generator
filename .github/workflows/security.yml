@@ -10,6 +10,8 @@ concurrency:
 jobs:
   python-dependencies:
     name: Python dependencies / ${{ matrix.service }}
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -30,6 +32,8 @@ jobs:
         run: uvx --python 3.14 --from pip-audit==2.9.0 pip-audit --strict -r "${RUNNER_TEMP}/requirements.txt"
   npm-dependencies:
     name: npm dependencies
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,6 +46,8 @@ jobs:
       - run: npm audit --prefix apps/web --audit-level=high
   secrets:
     name: Secrets in changes
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

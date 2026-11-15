@@ -12,6 +12,8 @@ concurrency:
 jobs:
   analyze:
     name: Analyze / ${{ matrix.language }}
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

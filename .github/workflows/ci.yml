@@ -10,6 +10,8 @@ concurrency:
 jobs:
   backend:
     name: Backend / ${{ matrix.service }}
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -30,6 +32,8 @@ jobs:
         run: uv run --locked --project "services/${{ matrix.service }}" pytest "services/${{ matrix.service }}/tests"
   frontend:
     name: Frontend / types and build
+    # Temporarily disabled while GitHub Actions is blocked by account billing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
