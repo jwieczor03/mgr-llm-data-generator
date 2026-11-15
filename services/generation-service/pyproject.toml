@@ -2,7 +2,11 @@
 name = "generation-service"
 version = "0.1.0"
 requires-python = ">=3.14,<3.15"
-dependencies = ["fastapi==0.135.1", "uvicorn==0.42.0"]
+dependencies = [
+    "fastapi==0.135.1",
+    "pydantic-settings==2.16.3",
+    "uvicorn==0.42.0",
+]
 
 [dependency-groups]
 dev = ["pytest==9.0.2", "httpx==0.28.1"]

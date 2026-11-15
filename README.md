@@ -67,8 +67,8 @@ zawiera opisy, zależności, kryteria i planowane sprawdzenia:
 szkielety aplikacji, konfigurację, lokalny start, bazę i migracje,
 magazyn plików, dostęp, narzędzia testów, sprawdzenie całości
 oraz niezależny monitor z panelem diagnostycznym.
-T1 ma pełny opis do przeglądu; T2–T9 pozostają szkicami z jawnymi
-blokadami przed implementacją. Zadań nie opublikowano na GitHubie.
+T1 dostarcza szkielety. Implementacja T2 jest w toku; T3–T9 pozostają
+szkicami z jawnymi blokadami przed implementacją. Zadań nie opublikowano na GitHubie.
 
 ### Zadania S3 do późniejszego przeniesienia na GitHub
 
@@ -142,3 +142,28 @@ npm run dev --prefix apps/web
 ```
 
 Otwórz `http://127.0.0.1:5173/`. Każdy backend pod `/health/live` zwraca `{"status":"ok"}`; ten adres na porcie 5173 przechodzi przez proxy do `application-api`. Nieistniejący `/api/v1/nieznany` zwraca 404 jako JSON, a nieistniejąca strona i plik — 404. Procesy zatrzymuje się przez Ctrl+C. Endpoint potwierdza działanie procesu, a nie gotowość funkcji biznesowych.
+
+## Konfiguracja backendów
+
+Każdy backend ma własny plik `.env` w `services/<nazwa-serwisu>`. Skopiuj
+znajdujący się tam `.env.example` do `.env` i wypełnij wymagane pola. Pliki
+`.env` nie są wersjonowane. Nie umieszczaj prawdziwych sekretów w przykładach.
+
+`application-api` wymaga `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`,
+`APP_DB_USER`, `APP_DB_PASSWORD`, `GENERATION_SERVICE_URL` oraz
+`VALIDATION_SERVICE_URL`. Port bazy to liczba od 1 do 65535. Adresy usług są
+bazowymi adresami HTTP lub HTTPS, bez poświadczeń i dodatkowej ścieżki.
+Generator i walidator nie wymagają jeszcze parametrów konfiguracji.
+
+Zmienne przekazane procesowi mają pierwszeństwo przed `.env`, również gdy są
+puste. Zmiana konfiguracji wymaga restartu danego backendu. `GET /health/config`
+pokazuje wynik sprawdzenia konfiguracji i blokowane obszary, bez jej wartości.
+Status `valid` nie potwierdza dostępności bazy ani usług. `GET /health/live`
+potwierdza jedynie działanie procesu.
+
+Aby ręcznie sprawdzić diagnostykę, uruchom serwisy poleceniami z sekcji
+„Szkielet deweloperski S1-T1” i otwórz `http://127.0.0.1:8000/health/config`.
+Przy pustym `.env` raport wskaże brakujące pola. Uzupełnij `.env` i uruchom
+`application-api` ponownie: przy poprawnych wartościach status zmieni się na
+`valid`. Zmień pole w pliku podczas działania procesu i odczytaj raport przed
+restartem oraz po nim, aby sprawdzić, kiedy zmiana jest stosowana.

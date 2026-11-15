@@ -38,6 +38,16 @@ prefiksami operacji biznesowych. Zabezpieczenia i ekspozycja sieciowa
 wymagają osobnego doprecyzowania; nie jest to zgoda na publiczne
 udostępnienie generatora lub walidatora.
 
+### Diagnostyka konfiguracji S1-T2
+
+Każdy backend udostępnia `GET /health/config` (HTTP 200) z polami `service`,
+`status` (`valid` lub `invalid`), `issues` (`field`, `code`, `message`)
+i `blocked_capabilities`. Pole `field` może być puste przy błędzie pliku.
+Obszary `application-api` to `database`, `generation` i `validation`.
+Odpowiedź nie zawiera wartości konfiguracji. Nie sprawdza ona połączeń;
+T9 obejmuje szerszą diagnostykę i monitor. Zależne operacje zwracają 503
+z kodem `configuration_unavailable` i listą zablokowanych obszarów.
+
 ### Szczegółowa diagnostyka i monitoring — zakres uzgodniony, kontrakt otwarty
 
 Każdy serwis ma sprawdzać poprawność uruchomienia, wymagane zmienne
@@ -71,8 +81,8 @@ uruchomienia i zgody użytkownika na daną próbę. Nie ustalono kontraktu
 takiej akcji ani mechanizmu potwierdzania kosztu. Nie wykonano płatnych
 prób.
 
-Nie wybrano jeszcze ścieżki tej diagnostyki, formatu pól, kodów HTTP,
-zabezpieczeń ani limitów czasu. Nie zatwierdza to
+Dla szerszej diagnostyki T9 nie wybrano jeszcze ścieżki, formatu pól,
+kodów HTTP, zabezpieczeń ani limitów czasu. Raport konfiguracji T2 opisano powyżej. Nie zatwierdza to
 automatycznie proponowanego `/internal/v1/health/ready` i jego pól.
 Zatwierdzono tryb diagnostyczny mimo brakujących zmiennych lub sekretów
 oraz błędnej konfiguracji: health check podaje przyczyny i ograniczenia,

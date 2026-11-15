@@ -138,7 +138,7 @@ konfiguracja narzędzi powstanie tylko raz. Kroki nie są osobnymi issues.
 | ID | Uzgodnione zadanie | Oczekiwany rezultat i granice |
 | --- | --- | --- |
 | S1-T1 | Utworzyć szkielety frontendu i trzech serwisów backendowych | Podstawa React/TypeScript z Vite i npm na Node.js 26 LTS oraz osobne aplikacje FastAPI na Pythonie 3.14, uruchamiane przez Uvicorn. Każdy backend ma osobny projekt uv. Bez ekranów funkcjonalnych, integracji LLM i walidacji danych. Uzgodniono jeden wspólny układ repozytorium z frontendem w `apps/web/` i backendami w `services/application-api/`, `services/generation-service/`, `services/validation-service/`; katalogi są do utworzenia. Zatwierdzono minimalną strukturę backendów, kontrakt `/health/live`, ekran techniczny, adresy deweloperskie, proxy Vite i minimalny routing. Dokładne wersje dobierze deweloper po przeglądzie i próbie zgodności, bez zmiany uzgodnionego stosu. Pełny opis poniżej przygotowano do przeglądu i akceptacji. |
-| S1-T2 | Przygotować konfigurację i ochronę sekretów | Oddzielenie adresów, poświadczeń i parametrów środowiska od logiki. Każdy backend ma własny lokalny `.env` poza Git i wersjonowany `.env.example` z opisem wymaganych zmiennych, bez prawdziwych sekretów. Odczyt i walidacja przez zatwierdzone Pydantic Settings przy starcie; zmiana konfiguracji wymaga restartu serwisu. Zmienne środowiskowe procesu lub kontenera mają pierwszeństwo przed `.env`. Braki konfiguracji zgłasza tryb diagnostyczny, blokując zależne operacje. Zestaw parametrów, szczegóły walidacji i ukrywania sekretów wymagają uzgodnienia. |
+| S1-T2 | Przygotować konfigurację i ochronę sekretów | Oddzielenie adresów, poświadczeń i parametrów środowiska od logiki. Każdy backend ma własny lokalny `.env` poza Git i wersjonowany `.env.example` z opisem wymaganych zmiennych, bez prawdziwych sekretów. Odczyt i walidacja przez zatwierdzone Pydantic Settings przy starcie; zmiana konfiguracji wymaga restartu serwisu. Zmienne środowiskowe procesu lub kontenera mają pierwszeństwo przed `.env`. Braki konfiguracji zgłasza tryb diagnostyczny, blokując zależne operacje. Katalog parametrów i raport konfiguracji uzgodniono dla S1-T2; próby zależności należą do T9. |
 | S1-T3 | Przygotować lokalne uruchomienie backendów i baz w Docker Compose | Wspólny start trzech backendów i potrzebnych baz z uzgodnionymi połączeniami i ekspozycją sieciową. Bez publicznego hostingu; nie rozstrzyga izolacji próbnego importu z S7 ani OD-02. Wersje, sieci, wolumeny i sprawdzanie gotowości pozostają do ustalenia. |
 | S1-T4 | Podłączyć bazę aplikacji i przygotować mechanizm migracji | Techniczna podstawa połączenia i kontrolowanej aktualizacji struktury PostgreSQL aplikacji w `application-api`, przez zatwierdzone SQLAlchemy i Psycopg oraz migracje Alembic, uruchamiane automatycznie wyłącznie w fazie startu tego serwisu. Błąd migracji pozostawia tryb diagnostyczny z przyczyną i blokadą funkcji wymagających bazy; ponowienie wymaga restartu. Bez tabel projektów, schematów i wykonań z dalszych story; bez nadawania generatorowi i walidatorowi dostępu do tej bazy. Migracje nie należą do health checków. Dokładne wersje i zgodność wymagają sprawdzenia; ochrona przed równoczesnym wykonaniem, tryb połączeń i transakcji pozostają do uzgodnienia. |
 | S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Lokalny magazyn za adapterem jest propozycją, nie zatwierdzoną decyzją. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. Kontrakt wymaga uzgodnienia. |
@@ -312,7 +312,7 @@ pozostają blokadą integracji T3/T8, nie powodem tworzenia ich na zapas w T1.
 
 #### S1-T2 — Przygotować konfigurację i ochronę sekretów
 
-**Status:** szkic uzgodnionego zakresu; blokady przed implementacją.
+**Status:** implementacja S1-T2 w toku. Katalog konfiguracji i raport HTTP uzgodniono w rozmowie.
 
 **Cel:** każdy backend używa jawnie opisanej konfiguracji, a braki
 nie wyłączają diagnostyki ani nie ujawniają sekretów.
@@ -324,8 +324,7 @@ będą szkielety T1. Istniejący `.gitignore` ignoruje `.env`.
 W każdym z trzech uzgodnionych katalogów backendów `.env`
 i `.env.example` są do utworzenia; pierwszy pozostaje lokalny.
 
-**Zależności:** T1; przed pełną implementacją uzgodnienie katalogu
-zmiennych i kontraktu diagnostyki wspólnie z T9.
+**Zależności:** T1; katalog zmiennych i raport konfiguracji uzgodniono w zakresie S1-T2. Szersza diagnostyka pozostaje w T9.
 
 **Uzgodnione kroki:**
 1. Opisać uzgodnione wymagane parametry w `.env.example`, bez prawdziwych
@@ -350,9 +349,14 @@ bezpieczną przyczynę w diagnostyce i blokadę zależnej operacji.
 Brak klucza nieużywanego dostawcy nie blokuje używanego zakresu.
 Przejrzeć pliki wersjonowane, logi i odpowiedzi pod kątem wycieku sekretów.
 
-**Do wyjaśnienia:** nazwy, typy i wymagalność parametrów, reguły walidacji,
-bezpieczna prezentacja błędów oraz kontrakt i podział diagnostyki z T9.
-Bez tych decyzji nie dopisywać własnych pól ani endpointów.
+**Ustalenie implementacyjne:** `application-api` wymaga pól `APP_DB_HOST`,
+`APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`,
+`GENERATION_SERVICE_URL` i `VALIDATION_SERVICE_URL`; generator i walidator
+nie mają na tym etapie wymaganych pól. Raport `GET /health/config` przedstawia
+status walidacji konfiguracji, problemy i blokowane obszary bez jej wartości.
+Nie potwierdza dostępności zależności. Szczegółowe sprawdzanie zależności,
+agregacja i niezależny monitor należą do T9. Konfigurację LLM, magazynu
+i środowiska importu ustalimy przy właściwych integracjach.
 
 #### S1-T3 — Przygotować lokalne uruchomienie backendów i baz w Docker Compose
 
