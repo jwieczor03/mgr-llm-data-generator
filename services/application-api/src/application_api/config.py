@@ -2,6 +2,7 @@ from pathlib import Path
 from ipaddress import ip_address
 import re
 from urllib.parse import urlsplit
+from unicodedata import category
 
 from fastapi import HTTPException, Request
 from pydantic import SecretStr, ValidationError, field_validator
@@ -72,7 +73,7 @@ class Settings(BaseSettings):
             port = url.port
             valid = (url.scheme in ("http", "https") and url.hostname and
                      url.username is None and url.password is None and url.path in ("", "/") and
-                     not url.query and not url.fragment and not any(c.isspace() for c in value) and
+                     not url.query and not url.fragment and not any(c.isspace() or category(c) == "Cc" for c in value) and
                      (port is None or 1 <= port <= 65535))
         except ValueError:
             valid = False

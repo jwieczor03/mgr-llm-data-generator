@@ -140,3 +140,17 @@ def test_url_with_empty_userinfo_is_invalid(monkeypatch, tmp_path):
     path = setup_env(monkeypatch, tmp_path)
     monkeypatch.setenv('GENERATION_SERVICE_URL', 'http://@localhost:8001')
     assert load_config(path)[1]['blocked_capabilities'] == ['generation']
+
+
+def test_service_urls_reject_control_characters(monkeypatch, tmp_path):
+    for field, capability in (
+        ('GENERATION_SERVICE_URL', 'generation'),
+        ('VALIDATION_SERVICE_URL', 'validation'),
+    ):
+        for control in ('\x00', '\x1f', '\x7f', '\x80'):
+            path = setup_env(monkeypatch, tmp_path)
+            with path.open('a') as config_file:
+                config_file.write(f'{field}=http://local{control}host:8001\n')
+            _, report = load_config(path)
+            assert report['blocked_capabilities'] == [capability]
+            assert report['issues'][0]['field'] == field
