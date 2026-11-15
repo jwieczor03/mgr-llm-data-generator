@@ -40,3 +40,6 @@ vectordb/
 # Ignorujemy logi działania serwera
 logs/
 *.log
+# Frontend build and dependencies
+node_modules/
+dist/

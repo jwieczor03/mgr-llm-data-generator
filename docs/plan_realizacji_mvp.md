@@ -1,5 +1,13 @@
 # Plan realizacji MVP — story i stan planowania
 
+**Stan implementacji S1-T1 — 15 listopada 2026:** utworzono szkielety
+frontendowe i backendowe. Testy endpointów, build oraz lokalne sprawdzenie
+proxy i odpowiedzi 404 przeszły; ekran i proxy sprawdzono w przeglądarce.
+Zmiana oczekuje na ręczny odbiór użytkownika. Szczegóły uruchomienia
+zawiera [README](../README.md#szkielet-deweloperski-s1-t1). Zapisy poniżej
+o braku kodu i planowanych testach opisują punkt wyjścia.
+
+
 Dokument zawiera uzgodniony podział aplikacji na obszary pracy oraz punkt
 kontynuacji planowania. Obecnie jest jedynym miejscem zapisu backlogu:
 planu story, przyszłych zadań i podzadań. Publikację na GitHubie odłożono.
