@@ -142,3 +142,25 @@ npm run dev --prefix apps/web
 ```
 
 Otwórz `http://127.0.0.1:5173/`. Każdy backend pod `/health/live` zwraca `{"status":"ok"}`; ten adres na porcie 5173 przechodzi przez proxy do `application-api`. Nieistniejący `/api/v1/nieznany` zwraca 404 jako JSON, a nieistniejąca strona i plik — 404. Procesy zatrzymuje się przez Ctrl+C. Endpoint potwierdza działanie procesu, a nie gotowość funkcji biznesowych.
+
+## Kontrole pull requestów
+
+Po otwarciu PR i kolejnych commitach GitHub Actions uruchamia testy pytest
+każdego backendu oraz sprawdzanie typów i build frontendu. Instalacja korzysta
+z plików blokad. Ręczne uruchomienie jest dostępne w zakładce Actions.
+
+Kontrole bezpieczeństwa obejmują zależności Python (`pip-audit`) i npm
+(`npm audit`), sekrety w commitach PR (Gitleaks) oraz analizę kodu Python
+i JavaScript/TypeScript (CodeQL). Każda znana podatność Python i podatności
+npm o poziomie high lub critical powodują błąd kontroli. Gitleaks ukrywa
+znalezione wartości w wynikach. CodeQL publikuje osobną kontrolę GitHub
+„Code scanning results”; jej domyślne progi obejmują high, critical i error.
+Szczegóły wyników znajdują się w Checks oraz w zakładce Security.
+
+Do lokalnej kontroli backendów użyj poleceń pytest powyżej; zgodność blokad
+można sprawdzić przez `uv sync --locked --project services/<nazwa-serwisu>`.
+Dla frontendu wykonaj `npm ci --prefix apps/web`, `npm run build --prefix apps/web`
+i `npm audit --prefix apps/web --audit-level=high`. Audyty wymagają dostępu
+do publicznych baz podatności. Wykrycia należy przeanalizować; workflow
+nie zmienia zależności automatycznie. Zestaw kontroli nie potwierdza jeszcze
+pełnego przepływu aplikacji ani bezpieczeństwa wykonywania SQL.
