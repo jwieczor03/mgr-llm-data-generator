@@ -6,7 +6,7 @@ Wynikiem są polecenia `INSERT` albo paczka CSV. Aplikacja ma sprawdzać komplet
 
 ## Status
 
-Projekt jest na etapie specyfikacji i projektu architektury. Repozytorium zawiera dokumentację, nie gotową aplikację. Zapisano kierunki technologiczne i szczegółową propozycję serwisów; konkretne wersje, część mechanizmów i fizyczny podział nadal wymagają potwierdzenia. Instrukcja uruchomienia powstanie wraz z działającym rozwiązaniem.
+Projekt jest na etapie specyfikacji i projektu architektury. Repozytorium zawiera dokumentację i początkowe szkielety, nie gotową aplikację. Zapisano kierunki technologiczne i szczegółową propozycję serwisów; konkretne wersje, część mechanizmów i fizyczny podział nadal wymagają potwierdzenia. Instrukcję uruchomienia szkieletu opisano poniżej.
 
 MVP jest jednoosobowe i uruchamiane lokalnie. Jego zakres nie obejmuje obowiązkowego wdrożenia AWS, obsługi kolumn `json`/`jsonb` w schematach użytkownika, generowania samodzielnych dokumentów JSON ani automatycznej platformy eksperymentalnej. Obsługa tych kolumn jest potencjalnym kierunkiem rozwoju, nie zaplanowaną funkcją.
 
@@ -109,3 +109,36 @@ promptowania w głównym zakresie.
 - **Realizm:** ocena zewnętrzna, nie automatyczna gwarancja generatora.
 
 Lista nierozstrzygniętych szczegółów znajduje się w sekcji 16 specyfikacji. Nie należy zastępować tych decyzji założeniami zaczerpniętymi z archiwum.
+
+## Szkielet deweloperski S1-T1
+
+Repozytorium zawiera początkowe szkielety trzech serwisów i frontendu. Nie są one jeszcze gotową aplikacją. Do uruchomienia potrzebne są Python 3.14, uv oraz Node.js 26 i npm. Sprawdzono Python 3.14.6, uv 0.11.1, Node.js 26.13.0 i npm 11.20.0. Wersje bibliotek znajdują się w deklaracjach i plikach blokad poszczególnych projektów.
+
+Z katalogu głównego repozytorium zainstaluj zależności i wykonaj testy każdego backendu:
+
+```sh
+uv sync --project services/application-api --python 3.14
+uv sync --project services/generation-service --python 3.14
+uv sync --project services/validation-service --python 3.14
+uv run --project services/application-api pytest services/application-api/tests
+uv run --project services/generation-service pytest services/generation-service/tests
+uv run --project services/validation-service pytest services/validation-service/tests
+```
+
+Uruchom każdy serwis w osobnym terminalu:
+
+```sh
+uv run --project services/application-api uvicorn application_api.bootstrap:app --app-dir services/application-api/src --host 127.0.0.1 --port 8000
+uv run --project services/generation-service uvicorn generation_service.bootstrap:app --app-dir services/generation-service/src --host 127.0.0.1 --port 8001
+uv run --project services/validation-service uvicorn validation_service.bootstrap:app --app-dir services/validation-service/src --host 127.0.0.1 --port 8002
+```
+
+W kolejnym terminalu uruchom frontend:
+
+```sh
+npm ci --prefix apps/web
+npm run build --prefix apps/web
+npm run dev --prefix apps/web
+```
+
+Otwórz `http://127.0.0.1:5173/`. Każdy backend pod `/health/live` zwraca `{"status":"ok"}`; ten adres na porcie 5173 przechodzi przez proxy do `application-api`. Nieistniejący `/api/v1/nieznany` zwraca 404 jako JSON, a nieistniejąca strona i plik — 404. Procesy zatrzymuje się przez Ctrl+C. Endpoint potwierdza działanie procesu, a nie gotowość funkcji biznesowych.
