@@ -145,7 +145,7 @@ Do rozpisania serwisów wykorzystujemy **wariant A: Python + FastAPI oraz TypeSc
 | Walidacja | Python, FastAPI, parser SQL, `csv`, Psycopg; proponowana osobna instancja PostgreSQL do prób. | Python, FastAPI, osobny serwis oraz metoda próbnego importu uzgodnione; pozostałe narzędzia, zakres OD-01 i organizacja OD-02 wymagają potwierdzenia. |
 | Lokalny model | Ollama jako gotowe środowisko udostępniania modeli. | Preferowany kandydat, bez wyboru modelu i pobierania go. |
 | Komunikacja | HTTP + JSON + OpenAPI, HTTPX po stronie klientów Python. | HTTP + JSON + OpenAPI między serwisami zatwierdzone; HTTPX i szczegóły kontraktów pozostają propozycją. |
-| Uruchomienie | Docker Compose; lokalny magazyn artefaktów za adapterem. | Docker Compose zatwierdzony dla backendów i potrzebnych baz; szczegóły konfiguracji i magazynu pozostają propozycją. |
+| Uruchomienie | Docker Compose; lokalny magazyn artefaktów za adapterem. | Docker Compose zatwierdzony dla backendów i potrzebnych baz; lokalny adapter i kontrakt magazynu ustalił architekt w procesie S1-T5, zgodnie z decyzją poniżej. Implementację i testy odnotowujemy osobno. |
 | Zależności i narzędzia jakości | uv, Ruff, mypy, pytest, Playwright. | uv zatwierdzone do zarządzania zależnościami i środowiskami backendów Python; pytest zatwierdzone do testów automatycznych wszystkich trzech backendów. Pozostałe narzędzia oraz wersje nadal są propozycją. |
 
 **Osobna decyzja z 14 listopada 2026 podczas planowania S1:** użytkownik zatwierdził trzy osobno uruchamiane serwisy backendowe: zarządzanie (`application-api`), generowanie (`generation-service`) i walidację (`validation-service`), obok aplikacji przeglądarkowej. Backend zarządzający zawiera osobne moduły projektów i wykonań, a nie osobne mikroserwisy dla każdej tabeli. Ta akceptacja nie rozstrzyga sposobu lokalnego uruchomienia, bibliotek komunikacji, zabezpieczeń ani szczegółowych kontraktów usług.
@@ -635,6 +635,128 @@ jeszcze zaimplementowany ani przetestowany.
 Kolejnym poziomem jest [LLD v0.1](lld/README.md): struktura modułów, proponowane tabele i klucze, kontrakty API oraz maszyna stanów z transakcjami i fencing. To projekt do przeglądu; propozycje LP nie są nowymi zatwierdzonymi wymaganiami i nie zamykają OD.
 
 [Projekt walidacji](lld/walidacja.md) rozróżnia potwierdzony czteroetapowy przebieg i cztery rodzaje reguł objęte MVP od niezatwierdzonej macierzy typów oraz otwartych szczegółów wykonania reguł.
+
+### Decyzje architekta z 16 listopada 2026 — realizacja S1-T5
+
+**Status: ustalone przez rolę senior-software-architect w procesie
+realizacji zadania [#20](https://github.com/jwieczor03/mgr-llm-data-generator/issues/20).**
+Użytkownik delegował tej roli decyzje techniczne w granicach zadania.
+Nie jest to ręczna akceptacja szczegółów ani potwierdzenie implementacji.
+Zapis rozstrzyga techniczne niewiadome szkicu T5. Nie zmienia zasad
+przyjmowania paczki DDL, dostępności czatu ani fizycznego sprzątania z OD-09.
+
+**Granica i odpowiedzialność.** W `application-api` powstaje moduł
+`artifact_store.py`: niezależny od FastAPI kontrakt `ArtifactStore`,
+logiczna referencja `ArtifactRef` oraz implementacja `LocalArtifactStore`.
+Wykorzystujemy bibliotekę standardową Pythona 3.14, bez nowej zależności.
+Lokalny adapter jest wystarczający dla jednoosobowego MVP. Magazyn sieciowy
+wymagałby teraz dodatkowej infrastruktury bez wymagania produktu.
+Kontrakt pozwala podstawić inną implementację bez udostępniania ścieżek
+logice funkcji. Nie powstają jeszcze funkcje biznesowe używające plików.
+
+**Minimalny kontrakt.** `put(namespace, content: bytes) -> ArtifactRef`
+zapisuje niezmieniony ciąg bajtów jako nowy plik. `get(ref) -> bytes`
+odczytuje cały plik; `delete(ref) -> bool` usuwa dokładnie ten obiekt,
+zwracając `True`, gdy go usunięto, i `False`, gdy już nie istniał.
+Przestrzenie mają zamknięte nazwy `project` (oryginały DDL) i `working`
+(pliki robocze). Referencja zawiera tylko przestrzeń i kanoniczny tekstowy
+UUID v4 wygenerowany przez adapter. Nie zawiera nazwy wgranego pliku,
+identyfikatora właściciela ani lokalnej ścieżki. Jej poprawność sprawdzamy
+również przy odczycie i usuwaniu. Nie ma operacji nadpisania, listowania,
+usuwania katalogu ani sprzątania według wieku. Każdy zapis otrzymuje nową
+referencję. Powiązanie z projektem, wersją schematu i czatem należy do
+późniejszych funkcji; sama znajomość referencji nie nadaje praw dostępu.
+Brak strumieniowania jest jawnym ograniczeniem pierwszego kontraktu,
+nie limitem wielkości pliku ani akceptacją limitu uploadu S2.
+
+**Konfiguracja i przygotowanie zasobów.** Wymagane są dwa ustawienia
+wyłącznie `application-api`: `ARTIFACT_PROJECT_ROOT` i
+`ARTIFACT_WORKING_ROOT`. Muszą być niepustymi bezwzględnymi ścieżkami
+odrębnych katalogów; po normalizacji żaden nie może zawierać drugiego.
+Zmienne procesu mają dotychczasowe pierwszeństwo przed `.env`.
+Brak lub błędna wartość blokuje capability `artifacts`, zachowując HTTP,
+frontend, `/health/live` i niezależną diagnostykę bazy.
+Adapter nie tworzy brakujących katalogów i nie zmienia ich uprawnień.
+Operator przygotowuje je przed startem; instrukcja opisuje to dla hosta.
+Compose montuje tylko do API dwa nazwane wolumeny `artifact-project-data`
+i `artifact-working-data` pod `/var/lib/application-api/project`
+i `/var/lib/application-api/working`. Obraz przygotowuje te katalogi dla
+obecnego UID/GID 10001. Zwykłe odtworzenie kontenera zachowuje oba wolumeny;
+nie oznacza przywracania rozmowy ani bezterminowej retencji danych roboczych.
+Generator i walidator nie otrzymują tych montowań. Komunikację plikową
+między serwisami zaprojektujemy w ich właściwych zadaniach.
+
+**Zapis i błędy.** Przed publikacją kompletna treść trafia do wyłącznie
+utworzonego pliku tymczasowego w tym samym katalogu; zapis należy opróżnić
+i wykonać `fsync` pliku. Dopiero później następuje atomowa publikacja
+pod nowym identyfikatorem, bez zastępowania istniejącego obiektu.
+W razie kolizji identyfikatora generujemy nowy, bez utraty poprzednich danych.
+Nieudany zapis przed publikacją nie udostępnia częściowego obiektu ani
+referencji; adapter próbuje usunąć tylko własny plik tymczasowy.
+Może on pozostać po nagłym zabiciu procesu lub błędzie sprzątania;
+nie jest dostępny przez referencję. Nie dodajemy skanowania i kasowania
+pozostałości przy starcie. Publikacja jest punktem sukcesu zapisu;
+niepowodzenie usunięcia pomocniczej nazwy już po publikacji nie wycofuje
+kompletnego obiektu. Nie deklarujemy odporności na awarię całego dysku.
+Atomowość dotyczy pojedynczego pliku, nie transakcji paczki DDL i bazy S2.
+Usuwanie działa pojedynczo, bez automatycznych ponowień i bez rekurencji.
+
+Błędy kontraktu mają stałe kody bez surowej treści wyjątku systemowego:
+`invalid_reference`, `not_found`, `permission_denied`, `missing_root`,
+`invalid_resource` (np. katalog lub dowiązanie zamiast pliku) i `io_error`.
+`get` brakującego obiektu zgłasza `not_found`; `delete` tego samego obiektu
+jest idempotentne według wyniku `False`. Brak korzenia nie jest brakiem
+obiektu i nie może dać fałszywego sukcesu usunięcia. Błąd dostępu lub I/O
+zachowuje dotychczasowe obiekty i jest błędem technicznym, bez retry.
+Publiczny komunikat, diagnostyka i zwykły zapis błędu nie ujawniają
+fizycznych ścieżek, treści plików ani konfiguracji.
+
+**Granica bezpieczeństwa.** Jedyny segment nazwy obiektu pochodzi ze
+sprawdzonego UUID, nie z danych klienta/modelu. Operacje nie podążają
+za dowiązaniami symbolicznymi korzenia ani obiektu; sprawdzają, że obiekt
+jest zwykłym plikiem. Operacje względem otwartego katalogu i `O_NOFOLLOW`
+pozwalają uniknąć podmiany ścieżki pomiędzy sprawdzeniem a użyciem.
+Przodkowie ścieżki konfiguracyjnej są zaufaną konfiguracją operatora
+(np. systemowe `/tmp` może wskazywać `/private/tmp` na macOS).
+MVP wspiera tu POSIX: Linux w Compose i macOS dewelopera. Nie obiecujemy
+odporności na administratora hosta ani inny proces działający jako ten sam
+użytkownik i celowo modyfikujący prywatny magazyn. Katalogi nie są
+statycznie publikowane; T5 nie tworzy HTTP do odczytu ani zapisu plików.
+Kontrola własności zasobu pozostaje po stronie przyszłego wywołującego
+kodu aplikacji i T6, a nie wewnątrz adaptera systemu plików.
+
+**Diagnostyka i blokada operacji.** `GET /health/artifacts` zwraca HTTP 200
+z `service: application-api`, łącznym `status: ready|unavailable`,
+`blocked_capabilities` (puste albo `artifacts`) oraz odrębnym wynikiem
+`project` i `working` (`status: ready|unavailable`, `code: null|kod`).
+Dla braku/błędu konfiguracji kod to `configuration_unavailable`;
+pozostałe kody wynikają z kontraktu powyżej. Raport nie pokazuje ścieżek.
+Sprawdzenie tworzy, zapisuje, odczytuje i usuwa wyłącznie własny plik próbny,
+sprawdzając rzeczywisty dostęp zamiast samych bitów uprawnień.
+Nie modyfikuje istniejących artefaktów i nie tworzy brakujących katalogów.
+Odtwarzamy probe przy każdym wywołaniu; po przywróceniu zasobu kolejny
+raport i operacja mogą działać bez restartu. Zmiana samej konfiguracji
+nadal wymaga restartu. Strażnik `require_capabilities("artifacts")`
+odrzuca operacje zależne kodem 503 (`configuration_unavailable` albo
+`artifacts_unavailable`). Nie dodajemy w T5 biznesowego endpointu tylko
+na potrzeby pokazania tej blokady; test może zarejestrować własną trasę.
+
+**Dowody i ograniczenia.** Wykonawca sprawdzi kontrakt na katalogach
+tymczasowych, niepełny zapis i błąd usuwania, niezmienność starych obiektów,
+symlinki, błędne referencje, brak korzenia, odmowę dostępu oraz odzyskanie
+dostępności. Test rzeczywistych kontenerów sprawdzi uprawnienia UID 10001,
+oba wolumeny po odtworzeniu API i brak ich montowania innym serwisom.
+Odmowę dostępu należy sprawdzić w procesie bez uprawnień administratora
+albo przez kontrolowane wstrzyknięcie błędu systemowego, opisując różnicę.
+Nie implementujemy harmonogramu kasowania, rozliczania właścicieli,
+przyjmowania DDL ani eksportu. OD-09 pozostaje otwarte w swoim zakresie.
+
+Źródła techniczne sprawdzone 16 listopada 2026: dokumentacja Python 3.14
+[`os`](https://docs.python.org/3.14/library/os.html) — operacje względem
+katalogu, `link`, `replace`, `fsync`, `O_NOFOLLOW`; oraz
+[`tempfile`](https://docs.python.org/3.14/library/tempfile.html) — bezpieczne
+tworzenie plików tymczasowych i ograniczenia sprzątania po zabiciu procesu.
+To podstawa doboru mechanizmów; działanie adaptera potwierdzą testy zadania.
 
 ## 5. Co nadal jest otwarte
 

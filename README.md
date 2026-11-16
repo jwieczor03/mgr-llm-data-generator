@@ -306,8 +306,9 @@ znajdujący się tam `.env.example` do `.env` i wypełnij wymagane pola. Pliki
 `.env` nie są wersjonowane. Nie umieszczaj prawdziwych sekretów w przykładach.
 
 `application-api` wymaga `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`,
-`APP_DB_USER`, `APP_DB_PASSWORD`, `GENERATION_SERVICE_URL` oraz
-`VALIDATION_SERVICE_URL`. Port bazy to liczba od 1 do 65535. Adresy usług są
+`APP_DB_USER`, `APP_DB_PASSWORD`, `GENERATION_SERVICE_URL`,
+`VALIDATION_SERVICE_URL`, `ARTIFACT_PROJECT_ROOT` i `ARTIFACT_WORKING_ROOT`.
+Port bazy to liczba od 1 do 65535. Adresy usług są
 bazowymi adresami HTTP lub HTTPS, bez poświadczeń i dodatkowej ścieżki.
 Generator i walidator nie wymagają jeszcze parametrów konfiguracji.
 
@@ -323,3 +324,41 @@ Przy pustym `.env` raport wskaże brakujące pola. Uzupełnij `.env` i uruchom
 `application-api` ponownie: przy poprawnych wartościach status zmieni się na
 `valid`. Zmień pole w pliku podczas działania procesu i odczytaj raport przed
 restartem oraz po nim, aby sprawdzić, kiedy zmiana jest stosowana.
+
+### Lokalny magazyn artefaktów S1-T5
+
+API przechowuje bajty w dwóch oddzielnych katalogach: `project` dla oryginałów
+DDL i `working` dla plików roboczych. Referencja zawiera nazwę przestrzeni
+i UUID, a nie ścieżkę. Aktualny kontrakt wczytuje cały plik do pamięci.
+Nie definiuje limitu uploadu ani czasu przechowywania plików roboczych.
+
+Compose ustawia ścieżki i montuje dwa osobne nazwane wolumeny tylko w API.
+Zwykłe odtworzenie kontenera zachowuje ich zawartość; `docker compose down --volumes` usuwa także dane wolumenów. Na hoście przygotuj dwa rozłączne
+katalogi, do których użytkownik uruchamiający API może czytać i pisać:
+
+```sh
+mkdir -p "$PWD/.local-artifacts/project" "$PWD/.local-artifacts/working"
+```
+
+Ustaw ich bezwzględne ścieżki w `services/application-api/.env` jako
+`ARTIFACT_PROJECT_ROOT` i `ARTIFACT_WORKING_ROOT`. Katalogi muszą istnieć,
+nie mogą być dowiązaniami symbolicznymi ani zawierać się wzajemnie. Zmiana
+konfiguracji wymaga restartu API. Compose nadpisuje te wartości swoimi
+ścieżkami wewnątrz kontenera.
+
+Odbiór diagnostyki: przy uruchomionym API wywołaj
+`curl --fail http://127.0.0.1:8000/health/artifacts`. Poprawne katalogi
+dają `ready` dla obu przestrzeni. Na hoście zatrzymaj API, zmień nazwę
+jednego pustego katalogu i uruchom API ponownie: raport wskaże `missing_root`,
+a `/health/live` nadal zadziała. Przywróć katalog; następne wywołanie
+diagnostyki powinno zwrócić `ready` bez restartu. Nie wykonuj tej próby na
+katalogach zawierających potrzebne dane.
+
+Testy adaptera i API oraz izolowanego Compose uruchom poleceniami:
+
+```sh
+uv run --locked --project services/application-api pytest services/application-api/tests -q
+RUN_COMPOSE_TESTS=1 uv run --locked --project services/application-api pytest tests/integration/test_compose.py -q
+```
+
+Test Compose tworzy i usuwa własny projekt i wolumeny.

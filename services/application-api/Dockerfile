@@ -18,6 +18,8 @@ COPY services/application-api/pyproject.toml services/application-api/uv.lock ./
 COPY services/application-api/src ./src
 RUN uv sync --locked --no-dev
 COPY --from=frontend /web/dist ./src/application_api/web
+RUN mkdir -p /var/lib/application-api/project /var/lib/application-api/working \
+    && chown 10001:10001 /var/lib/application-api/project /var/lib/application-api/working
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "application_api.bootstrap:app", "--host", "0.0.0.0", "--port", "8000"]

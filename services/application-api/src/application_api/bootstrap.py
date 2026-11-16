@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from application_api.artifact_store import LocalArtifactStore, UnconfiguredArtifactStore
 from application_api.config import load_config
 from application_api.database import Database
 
@@ -13,6 +14,8 @@ from application_api.database import Database
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.settings, app.state.config_report = load_config()
+    app.state.artifacts = (UnconfiguredArtifactStore() if app.state.settings is None or "artifacts" in app.state.config_report["blocked_capabilities"]
+                           else LocalArtifactStore(app.state.settings.artifact_project_root, app.state.settings.artifact_working_root))
     app.state.database = Database(app.state.settings, app.state.config_report)
     await run_in_threadpool(app.state.database.start)
     try:
@@ -36,11 +39,16 @@ def database_health(request: Request) -> dict:
     return request.app.state.database.report()
 
 
+def artifacts_health(request: Request) -> dict:
+    return request.app.state.artifacts.report()
+
+
 def create_app(frontend_directory: Path = FRONTEND_DIRECTORY) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     app.add_api_route("/health/live", live, methods=["GET"])
     app.add_api_route("/health/config", config, methods=["GET"])
     app.add_api_route("/health/database", database_health, methods=["GET"])
+    app.add_api_route("/health/artifacts", artifacts_health, methods=["GET"])
 
     # Missing build output must not prevent configuration diagnostics from starting.
     if (frontend_directory / "index.html").is_file():

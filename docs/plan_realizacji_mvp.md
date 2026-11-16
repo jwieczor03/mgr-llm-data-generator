@@ -141,7 +141,7 @@ konfiguracja narzędzi powstanie tylko raz. Kroki nie są osobnymi issues.
 | S1-T2 | Przygotować konfigurację i ochronę sekretów | Oddzielenie adresów, poświadczeń i parametrów środowiska od logiki. Każdy backend ma własny lokalny `.env` poza Git i wersjonowany `.env.example` z opisem wymaganych zmiennych, bez prawdziwych sekretów. Odczyt i walidacja przez zatwierdzone Pydantic Settings przy starcie; zmiana konfiguracji wymaga restartu serwisu. Zmienne środowiskowe procesu lub kontenera mają pierwszeństwo przed `.env`. Braki konfiguracji zgłasza tryb diagnostyczny, blokując zależne operacje. Katalog parametrów i raport konfiguracji uzgodniono dla S1-T2; próby zależności należą do T9. |
 | S1-T3 | Przygotować lokalne uruchomienie backendów i baz w Docker Compose | Dostarczono obrazy trzech backendów, frontend podawany przez API, Compose z bazą, lokalną konfiguracją, dwiema sieciami i trwałym wolumenem. Testy dostarczonego zakresu przeszły. Integracje T4/T5/T9 i odbiór w przeglądarce pozostają otwarte; szczegóły w opisie T3. Bez publicznego hostingu i rozstrzygania OD-02. |
 | S1-T4 | Podłączyć bazę aplikacji i przygotować mechanizm migracji | Techniczna podstawa połączenia i kontrolowanej aktualizacji struktury PostgreSQL aplikacji w `application-api`, przez zatwierdzone SQLAlchemy i Psycopg oraz migracje Alembic, uruchamiane automatycznie wyłącznie w fazie startu tego serwisu. Błąd migracji pozostawia tryb diagnostyczny z przyczyną i blokadą funkcji wymagających bazy; ponowienie wymaga restartu. Bez tabel projektów, schematów i wykonań z dalszych story; bez nadawania generatorowi i walidatorowi dostępu do tej bazy. Migracje nie należą do health checków. Dokładne wersje i zgodność wymagają sprawdzenia; ochrona przed równoczesnym wykonaniem, tryb połączeń i transakcji pozostają do uzgodnienia. |
-| S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Lokalny magazyn za adapterem jest propozycją, nie zatwierdzoną decyzją. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. Kontrakt wymaga uzgodnienia. |
+| S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Zaimplementowano lokalny adapter i diagnostykę zgodnie z decyzją architekta w procesie #20; review i odbiór ręczny pozostają osobnymi etapami. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. |
 | S1-T6 | Przygotować lokalny kontekst właściciela i granicę kontroli dostępu | Wymienne źródło kontekstu operacji oraz podstawa sprawdzania dostępu bez logowania. Stały lokalny identyfikator i szczegółowa polityka są propozycjami do decyzji. Podłączenie rzeczywistych zasobów należy do ich story. Bez kont, tokenów logowania i obsługi wielu użytkowników. |
 | S1-T7 | Skonfigurować wspólne narzędzia kontroli jakości i testów | Powtarzalne sprawdzanie kodu i uruchamianie testów frontendowych, backendowych oraz infrastruktura testów integracyjnych. Bez przenoszenia testów konkretnych funkcji do osobnego końcowego etapu. pytest dla backendów zatwierdzony; pozostałe narzędzia i szczegóły konfiguracji wymagają uzgodnienia. |
 | S1-T8 | Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska | Sprawdzony start, minimalne połączenie frontendu z API i instrukcja uruchomienia, zatrzymania oraz diagnostyki. Bez czatu i przepływu generowania. Zatwierdzono podawanie gotowego frontendu przez `application-api`, z osobnym Vite wyłącznie do developmentu. Minimalny kontrakt sprawdzenia połączenia oraz szczegóły konfiguracji wymagają uzgodnienia. |
@@ -183,7 +183,7 @@ przekazanie pełnego zakresu do implementacji.
 | [S1-T2 — Konfiguracja i sekrety](#s1-t2--przygotować-konfigurację-i-ochronę-sekretów) | T1 | Katalog parametrów, walidacja, bezpieczne błędy i wspólny z T9 kontrakt diagnostyki. |
 | [S1-T3 — Lokalne uruchomienie](#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose) | T1/T2 wykorzystane; dalsze integracje T4/T5/T9 | Podstawowy zakres zaimplementowany i sprawdzony przez HTTP. Otwarte: integracje T4/T5/T9 i ręczny odbiór w przeglądarce. |
 | [S1-T4 — Baza i migracje](#s1-t4--podłączyć-bazę-aplikacji-i-przygotować-mechanizm-migracji) | T1, T2; kontrakt diagnostyki i środowisko PostgreSQL do testów | Ochrona równoczesnych migracji, połączenia, transakcje, uprawnienia i testy mechanizmu. |
-| [S1-T5 — Granica magazynu plików](#s1-t5--przygotować-granicę-magazynu-plików-i-lokalny-adapter) | T1, T2 | Wybór adaptera i kontraktu, konfiguracja oraz zachowanie błędów i dostępu. |
+| [S1-T5 — Granica magazynu plików](#s1-t5--przygotować-granicę-magazynu-plików-i-lokalny-adapter) | T1, T2 | Adapter, konfigurację i diagnostykę zaimplementowano; review i odbiór ręczny pozostają do wykonania. |
 | [S1-T6 — Kontekst właściciela i dostęp](#s1-t6--przygotować-lokalny-kontekst-właściciela-i-granicę-kontroli-dostępu) | T1 | Źródło i postać kontekstu oraz polityka dostępu. |
 | [S1-T7 — Narzędzia jakości i testów](#s1-t7--skonfigurować-wspólne-narzędzia-kontroli-jakości-i-testów) | T1 | Narzędzia poza pytest, reguły i środowisko testów integracyjnych. |
 | [S1-T8 — Sprawdzenie całości i instrukcja](#s1-t8--sprawdzić-uruchomienie-całości-w-przeglądarce-i-opisać-obsługę-środowiska) | Dostarczone zakresy T1–T7 oraz T9 | Domknięcie zależności i minimalny kontrakt sprawdzenia połączenia frontend–API. |
@@ -640,38 +640,75 @@ i ręczny odbiór nie są zastąpione testami automatycznymi.
 
 #### S1-T5 — Przygotować granicę magazynu plików i lokalny adapter
 
-**Status:** szkic celu i granic; wybór lokalnego adaptera pozostaje
-propozycją. Brak podstaw do szczegółowej instrukcji implementacji.
+**Status:** decyzje techniczne ustalone 16 listopada 2026 przez rolę
+senior-software-architect w zleconym procesie realizacji
+[issue #20](https://github.com/jwieczor03/mgr-llm-data-generator/issues/20).
+Implementacja i testy wykonane w podanym zakresie; niezależne review i ręczny
+odbiór użytkownika pozostają do wykonania.
 
-**Cel:** logika aplikacji nie zależy bezpośrednio od fizycznego
-katalogu plików, co pozwoli później wymienić magazyn.
+**Cel:** logika aplikacji korzysta z logicznych referencji zamiast
+fizycznych ścieżek, aby później można było wymienić magazyn.
 
-**Źródło i punkt startowy:** REQ-066 i AC-28
-[specyfikacji](specyfikacja_mvp.md), opis granic S1 i
-[przygotowanie do hostowania](przygotowanie_do_hostowania.md).
-Brak kodu magazynu. `LocalArtifactStore` i ścieżki adapterów LLD
-są propozycjami, nie istniejącymi ani zatwierdzonymi modułami.
+**Źródło:** REQ-066 i AC-28 [specyfikacji](specyfikacja_mvp.md),
+[przygotowanie do hostowania](przygotowanie_do_hostowania.md) oraz
+[pełna decyzja architekta](ustalenia_architektoniczne.md#decyzje-architekta-z-16-listopada-2026--realizacja-s1-t5).
+Zależności T1 i T2 dostarczają szkielet i konfigurację. T4 nie nadaje
+magazynowi dostępu do bazy; S1-T5 nie dodaje tabel ani metadanych plików.
 
-**Zależności:** T1, T2; przed implementacją wybór adaptera
-i kontraktu operacji magazynu.
+**Zakres:** moduł `application_api.artifact_store` z kontraktem
+`ArtifactStore`, `ArtifactRef` i lokalnym adapterem. Operacje
+`put(namespace, content: bytes) -> ArtifactRef`, `get(ref) -> bytes`
+i `delete(ref) -> bool`, bez nadpisania, listowania i usuwania zbiorczego.
+Dwie przestrzenie `project` i `working` mają odrębne katalogi i wolumeny.
+Referencja zawiera tylko przestrzeń oraz UUID v4 wygenerowany przez adapter.
+Oryginalne bajty pozostają niezmienione. Wywołujący kod w przyszłych
+funkcjach odpowiada za kontrolę własności i przypisanie referencji do danych.
 
-**Zakres do opisania po decyzji:** utworzenie granicy dostępu do plików
-i zaakceptowanej implementacji; podłączenie jej konfiguracji oraz
-raportowania istnienia i dostępu do wymaganych zasobów.
-Nie ustalamy tutaj nazw metod, kluczy ani schematu katalogów.
+**Konfiguracja i integracja:** wymagane `ARTIFACT_PROJECT_ROOT`
+i `ARTIFACT_WORKING_ROOT` w API; bezwzględne, rozłączne korzenie,
+przygotowane przed startem. Braki blokują `artifacts`, zachowując diagnostykę
+HTTP. Dostarczyć bezpieczny `/health/artifacts` oraz strażnik capability
+według pełnego kontraktu w rejestrze. Compose montuje dwa nazwane wolumeny
+tylko do API; obraz przygotowuje katalogi dla UID/GID 10001. Nie zmieniać
+sposobu konfiguracji generatora i walidatora.
 
-**Poza zakresem:** eksport i API pobierania z S8, metadane kandydatów
-oraz cykl życia i sprzątanie czatu z S9.
+**Kryteria ukończenia i planowane sprawdzenia:**
 
-**Kryteria do doprecyzowania i planowane sprawdzenia:** po uzgodnieniu
-kontraktu sprawdzić jego operacje oraz brak zasobu i brak uprawnień.
-Logika korzystająca z magazynu nie powinna wymagać znajomości fizycznej
-ścieżki katalogu. Konkretne wyniki błędów muszą wynikać z przyszłej
-decyzji, nie z tego szkicu.
+1. Ten sam kontrakt pozwala podstawić adapter testowy bez fizycznych
+   ścieżek w kodzie wywołującym. Zapis/odczyt zachowują bajty, także binarne;
+   usuwanie działa tylko dla wskazanego obiektu i jest idempotentne.
+2. Przerwany/błędny zapis przed atomową publikacją nie udostępnia
+   częściowego obiektu ani nie narusza już zapisanych plików. Błąd
+   usuwania jest jawny. Plik pomocniczy pozostały po awarii nie jest
+   dostępny przez referencję. Atomowość nie obejmuje paczki DDL i bazy.
+3. Błędne referencje, `..`, ścieżki absolutne, obce przestrzenie,
+   symlinki i obiekty inne niż zwykłe pliki są odrzucane; żaden test
+   nie odczytuje ani nie usuwa pliku poza wskazanym magazynem.
+4. Brak konfiguracji/korzenia, odmowa dostępu i błąd I/O dają bezpieczne
+   kody z rejestru. Raport nie ujawnia ścieżek ani treści i nie blokuje
+   `/health/live`; capability odrzuca zależną operację przez 503.
+   Po przywróceniu katalogu/dostępu kolejny probe może potwierdzić gotowość.
+5. Test kontenerowy potwierdza probe jako UID 10001, zachowanie plików
+   obu przestrzeni po odtworzeniu API i brak montowań w pozostałych
+   backendach. Testy korzystają wyłącznie z własnych katalogów/wolumenów.
+6. README wyjaśnia przygotowanie katalogów na hoście, konfigurację
+   Compose, rzeczywiste komendy testów oraz ręczny odbiór diagnostyki
+   przy brakującym i poprawnym zasobie. Wykonawca zapisuje rzeczywiste
+   wyniki oraz ograniczenia; review i odbiór pozostają osobnymi etapami.
 
-**Do wyjaśnienia:** akceptacja lokalnego adaptera, jego lokalizacja,
-kontrakt, własność dostępu, konfiguracja, uprawnienia i błędy.
-To zadanie nie jest gotowe do implementacji.
+**Wyniki wykonawcy (16 listopada 2026):** testy API: 30 zaliczonych,
+9 pominiętych wymagających osobnej bazy; osobna regresja PostgreSQL: 9 zaliczonych;
+izolowany test Compose: 7 zaliczonych,
+w tym UID 10001 i trwałość obu wolumenów po odtworzeniu API; regresja generatora
+i walidatora: po 2 zaliczone testy. Odmowę uprawnień sprawdzono przez
+kontrolowany błąd systemowy, nie zmianą praw dostępu na hoście. Review oraz
+ręczny odbiór nie zostały wykonane.
+
+**Poza zakresem:** workflow uploadu i wersji DDL z S2, eksport i API
+pobierania z S8, metadane kandydatów, uprawnienia biznesowe T6 oraz
+cykl życia i sprzątanie czatu z S9. Nie wybrano terminu kasowania plików
+roboczych i nie zamknięto OD-09. Pierwszy kontrakt odczytuje cały plik
+do pamięci; nie ustanawia limitu rozmiaru uploadu ani retencji.
 
 #### S1-T6 — Przygotować lokalny kontekst właściciela i granicę kontroli dostępu
 

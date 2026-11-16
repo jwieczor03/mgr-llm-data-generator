@@ -14,6 +14,8 @@ ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore", hide_input_in_errors=True)
 
+    artifact_project_root: str | None = None
+    artifact_working_root: str | None = None
     app_db_host: str | None = None
     app_db_port: int | None = None
     app_db_name: str | None = None
@@ -83,6 +85,7 @@ class Settings(BaseSettings):
 
 
 FIELDS = {
+    "artifact_project_root": "artifacts", "artifact_working_root": "artifacts",
     "app_db_host": "database", "app_db_port": "database", "app_db_name": "database",
     "app_db_user": "database", "app_db_password": "database",
     "generation_service_url": "generation", "validation_service_url": "validation",
@@ -108,6 +111,20 @@ def load_config(env_file: Path = ENV_FILE) -> tuple[Settings | None, dict]:
     for name in FIELDS:
         if name.upper() not in invalid_fields and getattr(settings, name, None) is None:
             issues.append({"field": name.upper(), "code": "missing", "message": "Brak wymaganej wartości."})
+    roots = (settings.artifact_project_root, settings.artifact_working_root)
+    if all(roots):
+        import os
+        normalized = [os.path.normpath(root) for root in roots]
+        valid = all(os.path.isabs(root) and "\x00" not in root for root in roots)
+        if valid:
+            valid = os.path.commonpath(normalized) not in normalized
+        if not valid:
+            issues.extend({"field": name.upper(), "code": "invalid", "message": "Nieprawidłowa wartość."}
+                          for name in ("artifact_project_root", "artifact_working_root"))
+    elif any(root is not None and (not root.strip() or not Path(root).is_absolute() or "\x00" in root) for root in roots):
+        issues.extend({"field": name.upper(), "code": "invalid", "message": "Nieprawidłowa wartość."}
+                      for name, root in zip(("artifact_project_root", "artifact_working_root"), roots)
+                      if root is not None and (not root.strip() or not Path(root).is_absolute() or "\x00" in root))
     blocked = list(dict.fromkeys(FIELDS[issue["field"].lower()] for issue in issues))
     return settings, {"service": "application-api", "status": "invalid" if issues else "valid", "issues": issues, "blocked_capabilities": blocked}
 
@@ -117,6 +134,8 @@ def require_capabilities(*capabilities: str):
         blocked = [item for item in capabilities if item in request.app.state.config_report["blocked_capabilities"]]
         if blocked:
             raise HTTPException(status_code=503, detail={"code": "configuration_unavailable", "blocked_capabilities": blocked})
+        if "artifacts" in capabilities and request.app.state.artifacts.report()["status"] != "ready":
+            raise HTTPException(status_code=503, detail={"code": "artifacts_unavailable", "blocked_capabilities": ["artifacts"]})
         if "database" in capabilities and request.app.state.database.report()["status"] != "ready":
             raise HTTPException(status_code=503, detail={"code": "database_unavailable", "blocked_capabilities": ["database"]})
     return dependency
