@@ -13,7 +13,9 @@ Compose, obrazy backendów, podawanie frontendu przez API, sieci i wolumen
 bazy. Python 3.14.10, Node.js 26.13.1, uv 0.11.1 i PostgreSQL 18.7
 sprawdzono przez budowanie i testy rzeczywistych kontenerów na macOS arm64.
 Nazwy, ścieżki i wyniki testów zapisano w [planie S1-T3](plan_realizacji_mvp.md#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose).
-Integracje migracji T4, magazynów T5 i monitora T9 nie są dostarczone.
+Migracje T4 zostały zaimplementowane i sprawdzone testami opisanymi
+w [planie S1-T4](plan_realizacji_mvp.md#s1-t4--podłączyć-bazę-aplikacji-i-przygotować-mechanizm-migracji).
+Magazyn T5 i monitor T9 nie są dostarczone.
 Wcześniejsze wpisy „nie wykonano” opisują stan w momencie danej decyzji.
 
 ## 1. Jak rozumieć status decyzji
@@ -354,6 +356,107 @@ i transakcji oraz szczegóły konfiguracji pozostają do sprawdzenia
 lub uzgodnienia. Nie zainstalowano bibliotek, nie przygotowano migracji
 ani nie wykonano testów.
 
+### Decyzje architekta z 16 listopada 2026 — realizacja S1-T4
+
+**Status: ustalone przez rolę senior-software-architect w procesie
+realizacji zadania #19.** Użytkownik delegował tej roli decyzje techniczne
+w granicach zadania. Nie jest to ręczna akceptacja szczegółów przez użytkownika
+ani potwierdzenie implementacji. Poniższy zapis rozstrzyga techniczne
+niewiadome poprzedniej decyzji S1-T4; nie zatwierdza modeli tabel domenowych.
+
+**Połączenia i transakcje.** Używamy synchronicznego SQLAlchemy z Psycopg 3
+(`postgresql+psycopg`). Start migracji i zamknięcie zasobów wykonujemy poza
+pętlą obsługi asynchronicznych żądań FastAPI; synchroniczne operacje HTTP
+korzystają z jego puli wątków. To prostsze od utrzymywania dwóch trybów
+połączeń dla krótkich operacji lokalnego MVP. Silnik i fabryka sesji mogą
+należeć do procesu, ale sesja, transakcja i zajęte połączenie wyłącznie do
+konkretnej operacji. Sukces zatwierdza zapis, błąd wycofuje transakcję,
+a wyjście zawsze zamyka sesję. Nie przechowujemy jej w czacie ani podczas
+wywołań LLM. Pula: najwyżej 5 połączeń, bez dodatkowych połączeń ponad limit,
+oczekiwanie na połączenie 3 s, sprawdzenie połączenia przed ponownym użyciem.
+Połączenie z PostgreSQL ma limit 3 s; zapytanie limit 15 s. Są to lokalne
+limity techniczne T4, nie gwarancja czasu odpowiedzi całej aplikacji.
+
+**Migracje.** Jeden przebieg `upgrade head` odbywa się raz w fazie startu.
+Na tym samym połączeniu otwieramy jedną transakcję i najpierw uzyskujemy
+transakcyjną blokadę doradczą PostgreSQL (`pg_advisory_xact_lock`) ze stałym,
+udokumentowanym kluczem wspólnym dla wszystkich startów tej aplikacji.
+Blokada obejmuje także sprawdzenie i utworzenie `alembic_version`.
+Oczekiwanie na blokadę ogranicza `lock_timeout` 5 s; przekroczenie limitu
+kończy tę próbę diagnostycznym błędem. Blokada zwalnia się po zatwierdzeniu,
+wycofaniu albo utracie połączenia. Alembic otrzymuje istniejące połączenie
+w ramach tej transakcji. Początkowa rewizja nie tworzy tabel domenowych;
+zapisuje jedynie wersję mechanizmu migracji w `app.alembic_version`.
+Nie stosujemy `create_all`, automatycznego projektowania migracji, `stamp`
+zamiast wykonania ani migracji wymagających autocommit. Potrzeba takiej
+migracji w przyszłości wymaga ponownego rozpatrzenia transakcji i blokady.
+Pliki rewizji i środowisko Alembic muszą wejść również do obrazu serwisu.
+
+**Konto i schemat.** Jedno konto `APP_DB_USER` służy w lokalnym MVP do
+migracji i zwykłych operacji. To konto z hasłem, bez `SUPERUSER`, `CREATEDB`
+i `CREATEROLE`, odrębne od inicjalizacyjnego `POSTGRES_USER`. Ma `CONNECT`
+do bazy aplikacji oraz jest właścicielem dedykowanego schematu `app`;
+nie otrzymuje administracji klastrem. Obiekty i tabela wersji powstają
+wyłącznie w `app`, a połączenia jawnie wybierają ten schemat. Start sprawdza
+brak tych trzech uprawnień administracyjnych i dostęp do schematu;
+nie tworzy kont ani nie podnosi uprawnień. Rozdzielenie konta migracji
+od konta zwykłych operacji pozostaje możliwością przed hostowaniem,
+bez dodatkowego zestawu sekretów w tym zadaniu.
+
+Inicjalizację konta i schematu zapewnia skrypt obrazu PostgreSQL, wykonywany
+przez konto inicjalizacyjne tylko przy tworzeniu pustego wolumenu. Rootowy
+`.env` dostarcza do niego `APP_DB_USER` i `APP_DB_PASSWORD`; plik `.env`
+`application-api` zachowuje własne `APP_DB_*` z T2. Użytkownik wpisuje zgodne
+wartości w obu miejscach; backend nie otrzymuje poświadczeń administratora.
+Brak obu parametrów nie blokuje startu samej bazy ani diagnostyki backendu;
+nie tworzy wówczas konta aplikacji. Parametry nie mogą wskazywać roli
+inicjalizacyjnej. Skrypt nie zmienia hasła istniejącej roli. Dla istniejącego
+wolumenu README musi podać jawną procedurę utworzenia brakującego konta
+i schematu przez administratora, bez usuwania wolumenu. To przygotowanie
+infrastruktury; zwykłe stosowanie migracji nadal nie wymaga ręcznej komendy.
+
+**Diagnostyka i blokada operacji.** Zachowujemy znaczenie `/health/live`
+i `/health/config`. Nowy `GET /health/database` zwraca HTTP 200 i raport
+wyłącznie zależności bazodanowej, nie deklaruje gotowości całego serwisu.
+Raport zawiera `service: application-api`, `dependency: database`,
+`status: ready | unavailable`, `migration_status: applied | failed | not_run`,
+`issues` z bezpiecznym kodem i stałym komunikatem, `blocked_capabilities`
+(pusta lista albo `database`) oraz `checked_at` w UTC. Katalog kodów rozróżnia
+brak konfiguracji, brak połączenia, niewłaściwe uprawnienia, przekroczenie
+czasu blokady, błąd migracji i brak wymaganej wersji schematu. Nazwy pól
+konfiguracji mogą być podane, ich wartości, SQL i surowe wyjątki nie trafiają
+do odpowiedzi ani logów aplikacji.
+
+Po udanym starcie każde sprawdzenie bazy wykonuje tylko odczyt kontrolny
+połączenia i wersji schematu. Utrata bazy daje `unavailable`; odzyskanie
+połączenia i właściwej wersji może dać `ready` bez restartu, bez migracji.
+Natomiast błąd lub pominięcie migracji podczas startu jest zapamiętane do
+końca procesu: samo usunięcie przyczyny i wywołanie diagnostyki nie przywraca
+gotowości. Kolejna próba migracji wymaga restartu. Wspólny strażnik
+`require_capabilities('database')` łączy konfigurację, wynik startu i bieżącą
+niedestrukcyjną próbę bazy; zwraca 503 przed operacją wymagającą niedostępnej
+bazy. Sam strażnik nie gwarantuje powodzenia późniejszego zapytania.
+Pozostałe capability zachowują reguły T2. W tym zadaniu nie dodajemy
+produktowego endpointu pokazującego działanie bazy ani monitora z T9.
+
+**Weryfikacja.** Testy korzystają z jednorazowego PostgreSQL 18.7 z osobnymi
+poświadczeniami, losowym portem i zasobami należącymi wyłącznie do testu.
+Nie łączą się z bazą z lokalnych `.env`. Kontrolowane rewizje tworzące tabelę
+lub wymuszające błąd istnieją jedynie w izolowanej kopii migracji testu.
+Sprawdzamy pierwszy i kolejny start, wycofanie nieudanej rewizji, brak retry
+bez restartu, równoległe starty i timeout blokady, niedestrukcyjną diagnostykę,
+utratę i odzyskanie połączenia po udanym starcie, strażnik 503, sekrety,
+uprawnienia oraz obecność migracji w zbudowanym obrazie. Wersje bibliotek
+wykonawca dobiera po sprawdzeniu zgodności z Pythonem 3.14 i zapisuje
+w deklaracji oraz blokadzie zależności. Ten zapis nie jest wynikiem testów.
+
+Podstawy mechanizmu sprawdzono 16 listopada 2026 w oficjalnej dokumentacji:
+[blokady doradcze PostgreSQL](https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS),
+[przekazanie połączenia do Alembic](https://alembic.sqlalchemy.org/en/latest/cookbook.html#sharing-a-connection-across-one-or-more-programmatic-migration-commands)
+i [cykl sesji SQLAlchemy](https://docs.sqlalchemy.org/en/20/orm/session_basics.html).
+Dobór powyższych limitów, jednego konta i kontraktu diagnostyki jest decyzją
+architekta dla tego projektu, nie zaleceniem ilościowym tych źródeł.
+
 **Doprecyzowanie użytkownika z 14 listopada 2026 — diagnostyka uruchomienia:**
 użytkownik wymaga sprawdzenia działania serwisów i połączeń przy
 uruchamianiu, tak aby było wiadomo, które części działają.
@@ -577,7 +680,9 @@ Nie zamykamy tych punktów samym wyborem frameworka. Pełna lista znaczeń OD po
 
 Istnieją szkielety backendów i frontendu oraz konfiguracja T2. W S1-T3
 zbudowano obrazy, uruchomiono izolowane środowisko Compose i PostgreSQL
-oraz sprawdzono podstawowy zakres testami. Nie dostarczono jeszcze
-funkcji generowania, migracji T4 ani monitora T9. Nie wykonywano płatnych
+oraz sprawdzono podstawowy zakres testami. W S1-T4 zaimplementowano
+i przetestowano dostęp do bazy oraz migracje; ręczny odbiór pozostaje
+oddzielnym krokiem. Nie dostarczono jeszcze funkcji generowania ani
+monitora T9. Nie wykonywano płatnych
 wywołań modeli. Kontrola frontendu w przeglądarce pozostaje niewykonana
 z powodu braku dostępnego narzędzia i uprawnień Computer Use.

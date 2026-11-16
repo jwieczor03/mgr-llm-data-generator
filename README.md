@@ -67,8 +67,9 @@ zawiera opisy, zależności, kryteria i planowane sprawdzenia:
 szkielety aplikacji, konfigurację, lokalny start, bazę i migracje,
 magazyn plików, dostęp, narzędzia testów, sprawdzenie całości
 oraz niezależny monitor z panelem diagnostycznym.
-T1 dostarcza szkielety. Implementacja T2 jest w toku; T3–T9 pozostają
-szkicami z jawnymi blokadami przed implementacją. Zadań nie opublikowano na GitHubie.
+T1–T3 dostarczają szkielety, konfigurację i lokalne uruchomienie.
+T4 ma implementację i testy oraz oczekuje niezależnego review i odbioru;
+pozostałe zadania są opisane w planie wraz ze swoim statusem.
 
 ### Zadania S3 do późniejszego przeniesienia na GitHub
 
@@ -114,8 +115,8 @@ Lista nierozstrzygniętych szczegółów znajduje się w sekcji 16 specyfikacji.
 
 Ten zakres uruchamia trzy backendy i PostgreSQL aplikacji. Gotowy frontend
 udostępnia `application-api` pod `http://127.0.0.1:8000`, bez serwera Vite.
-To nadal fundament aplikacji: połączenie backendu z bazą i migracje należą
-do T4, a monitor z panelem na porcie 8080 do T9. Nie są jeszcze dostarczone.
+To nadal fundament aplikacji: S1-T4 dodaje połączenie `application-api`
+z bazą i migracje; monitor z panelem na porcie 8080 należy do T9.
 
 Potrzebny jest działający Docker z Compose co najmniej 2.24.4. Nie trzeba
 instalować Pythona ani Node.js na hoście. Z katalogu głównego repozytorium
@@ -129,8 +130,9 @@ cp -n services/validation-service/.env.example services/validation-service/.env
 ```
 
 W głównym `.env` wpisz własne `POSTGRES_PASSWORD`. `POSTGRES_DB` i
-`POSTGRES_USER` określają inicjalizowaną bazę i konto administracyjne;
-nie rozstrzygają docelowych uprawnień aplikacji z T4. Te parametry działają
+`POSTGRES_USER` określają inicjalizowaną bazę i konto administracyjne.
+`APP_DB_USER` oraz `APP_DB_PASSWORD` określają osobne konto aplikacji.
+Wpisz te same wartości w `services/application-api/.env`. Te parametry działają
 przy inicjalizacji pustego wolumenu, nie zmieniają hasła istniejącego konta.
 
 Każdy backend otrzymuje wyłącznie swój plik `.env`. Brak pliku lub wymaganych
@@ -147,8 +149,8 @@ VALIDATION_SERVICE_URL=http://validation-service:8000
 Pozostałe wymagane pola opisuje sekcja konfiguracji backendów. Główny `.env`
 nie uzupełnia automatycznie `APP_DB_*`. Bez pełnej konfiguracji raport
 `/health/config` ma status `invalid`; frontend i `/health/live` nadal działają.
-Nawet status `valid` nie potwierdza połączenia backendu z bazą — tej integracji
-jeszcze nie ma. Generator, walidator i baza nie mają portów publikowanych
+Status `valid` nie potwierdza połączenia z bazą; sprawdza je
+`/health/database`. Generator, walidator i baza nie mają portów publikowanych
 na hoście. Baza jest w osobnej sieci dostępnej tylko dla `application-api`.
 
 Po uzupełnieniu hasła bazy uruchom:
@@ -199,8 +201,7 @@ frontendu, uv 0.11.1 i PostgreSQL 18.7. Biblioteki są instalowane z blokad.
    do wykrywania tej awarii. Przywróć bazę przez `docker compose up -d app-db`.
 4. Zmień parametr backendu, odtwórz jego kontener i sprawdź nowy raport.
 5. Zatrzymaj i uruchom środowisko ponownie. Port 8080 pozostaje niedostępny
-   do czasu dostarczenia T9; migracje i połączenie aplikacji z bazą sprawdzimy
-   po T4. Ten odbiór nie potwierdza tych przyszłych integracji.
+   do czasu dostarczenia T9. Odbiór połączenia i migracji opisano poniżej.
 
 Automatyczne testy rzeczywistych kontenerów uruchom osobno:
 
@@ -215,6 +216,55 @@ bez `.env` backendu, pierwszeństwo jawnie przekazanych ustawień kontenera
 i brak `.env` w obrazach. Po wykonaniu usuwają wyłącznie swoje kontenery
 i testowy wolumen. Nie wymagają wypełniania lokalnych plików `.env`.
 Bez `RUN_COMPOSE_TESTS=1` ten zestaw jest pomijany.
+
+## Baza i migracje — S1-T4
+
+W głównym `.env` ustaw `APP_DB_USER` i `APP_DB_PASSWORD` inne niż konto
+administracyjne `POSTGRES_USER`. Te same dane wpisz w konfiguracji
+`services/application-api/.env`, wraz z nazwą bazy `APP_DB_NAME` zgodną
+z `POSTGRES_DB`. Na nowym wolumenie obraz PostgreSQL tworzy konto bez
+uprawnień administratora i schemat `app`. Brak obu parametrów konta nie
+blokuje bazy, ale nie tworzy konta aplikacji. Ustawienie tylko jednego lub
+wybór konta administratora powoduje błąd inicjalizacji.
+
+Przy istniejącym wolumenie, po uzupełnieniu obu plików, utwórz brakujące
+konto i schemat bez usuwania danych:
+
+```sh
+docker compose up -d --build app-db
+docker compose exec app-db /docker-entrypoint-initdb.d/10-app-role.sh
+docker compose up -d --build --force-recreate application-api
+```
+
+Skrypt nie zmienia hasła istniejącej roli ani właściciela istniejącego
+schematu. Jeśli konto lub schemat istnieją z innymi ustawieniami, administrator
+musi je uzgodnić przed startem; nie należy kasować wolumenu. Zmiana pliku
+`.env` wymaga odtworzenia kontenera, aby nowe wartości trafiły do środowiska.
+
+Backend wykonuje przygotowane migracje raz podczas startu, pod transakcyjną
+blokadą PostgreSQL (klucz `1395733556`, limit oczekiwania 5 s). Pierwsza
+rewizja tworzy wyłącznie `app.alembic_version`. Błąd migracji zachowuje
+tryb diagnostyczny; po naprawie wymagany jest restart backendu. Jeśli przy
+pierwszym starcie baza nie zdąży się uruchomić, po jej gotowości uruchom
+`docker compose restart application-api`. `/health/database` sprawdza
+połączenie i wersję schematu bez migracji. Po udanym starcie sam wykryje
+utratę i powrót bazy; nie gwarantuje sukcesu następnego zapytania.
+
+Ręczny odbiór: uruchom Compose, sprawdź `curl http://127.0.0.1:8000/health/database`
+i oczekuj `ready` oraz `applied`. Wykonaj `docker compose restart application-api`
+i sprawdź ponownie ten raport. Następnie zatrzymaj `app-db`, sprawdź raport
+`unavailable`, przywróć bazę i ponów kontrolę: po udanym starcie backendu
+powinien wrócić `ready`. Po błędzie migracji usuń jego przyczynę i zrestartuj
+backend. Endpointy `/health/live` i `/health/config` pozostają dostępne.
+
+Test izolowanej bazy (wymaga Docker):
+
+```sh
+RUN_DATABASE_TESTS=1 uv run --locked --project services/application-api pytest services/application-api/tests/test_database.py -q
+```
+
+Test tworzy własne kontenery PostgreSQL i usuwa je po zakończeniu. Rewizje
+wymuszające błąd lub tworzące tabelę istnieją tylko w kopii testowej.
 
 ## Szkielet deweloperski S1-T1
 

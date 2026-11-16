@@ -40,11 +40,15 @@ services:
     healthcheck: *backend-health
 
   app-db:
-    image: postgres:18.7-bookworm
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB-}
       POSTGRES_USER: ${POSTGRES_USER-}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD-}
+      APP_DB_USER: ${APP_DB_USER-}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD-}
     volumes:
       - app-db-data:/var/lib/postgresql
     networks: [database]

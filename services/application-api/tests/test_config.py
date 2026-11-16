@@ -85,7 +85,30 @@ def test_report_http_and_restart(monkeypatch, tmp_path):
         port = sock.getsockname()[1]
 
     def start():
-        process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'application_api.bootstrap:app', '--host', '127.0.0.1', '--port', str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # The copied subprocess exercises real settings and HTTP restart, but its
+        # database adapter must never connect to a developer's local server.
+        launcher = """
+import sys
+import uvicorn
+import application_api.database as database
+
+def forbidden(*args, **kwargs):
+    raise AssertionError('unexpected database connection or migration')
+
+database.create_engine = forbidden
+database.command.upgrade = forbidden
+class IsolatedDatabase:
+    def __init__(self, settings, report):
+        pass
+    def start(self):
+        pass
+    def close(self):
+        pass
+
+database.Database = IsolatedDatabase
+uvicorn.run('application_api.bootstrap:app', host='127.0.0.1', port=int(sys.argv[1]))
+"""
+        process = subprocess.Popen([sys.executable, '-c', launcher, str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):
             try:
                 response = httpx.get(f'http://127.0.0.1:{port}/health/config', timeout=0.2)
