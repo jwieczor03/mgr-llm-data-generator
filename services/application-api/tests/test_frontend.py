@@ -3,7 +3,38 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from application_api import bootstrap, database
 from application_api.bootstrap import create_app
+from application_api.config import FIELDS, load_config
+
+
+@pytest.fixture(autouse=True)
+def isolate_lifespan(monkeypatch, tmp_path):
+    # Frontend tests never consult the developer's environment or service .env.
+    for name in FIELDS:
+        monkeypatch.delenv(name.upper(), raising=False)
+    isolated_config = load_config(tmp_path / "missing.env")
+    monkeypatch.setattr(bootstrap, "load_config", lambda: isolated_config)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Frontend tests must not create database engines or run migrations")
+
+    monkeypatch.setattr(database, "create_engine", forbidden)
+    monkeypatch.setattr(database.command, "upgrade", forbidden)
+
+
+def test_lifespan_ignores_real_environment_and_service_env(monkeypatch, tmp_path):
+    for key, value in {
+        "APP_DB_HOST": "localhost", "APP_DB_PORT": "5432", "APP_DB_NAME": "local",
+        "APP_DB_USER": "local-user", "APP_DB_PASSWORD": "local-password",
+    }.items():
+        monkeypatch.setenv(key, value)
+    # Credentials injected after fixture setup must not reach the application.
+    with TestClient(create_app(tmp_path)) as client:
+        report = client.get("/health/database").json()
+    assert report["migration_status"] == "not_run"
+    assert report["issues"][0]["code"] == "configuration_missing"
+    assert "local-password" not in str(report)
 
 
 @pytest.fixture

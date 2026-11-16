@@ -13,7 +13,9 @@ Compose, obrazy backendów, podawanie frontendu przez API, sieci i wolumen
 bazy. Python 3.14.10, Node.js 26.13.1, uv 0.11.1 i PostgreSQL 18.7
 sprawdzono przez budowanie i testy rzeczywistych kontenerów na macOS arm64.
 Nazwy, ścieżki i wyniki testów zapisano w [planie S1-T3](plan_realizacji_mvp.md#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose).
-Integracje migracji T4, magazynów T5 i monitora T9 nie są dostarczone.
+Migracje T4 zostały zaimplementowane i sprawdzone testami opisanymi
+w [planie S1-T4](plan_realizacji_mvp.md#s1-t4--podłączyć-bazę-aplikacji-i-przygotować-mechanizm-migracji).
+Magazyn T5 i monitor T9 nie są dostarczone.
 Wcześniejsze wpisy „nie wykonano” opisują stan w momencie danej decyzji.
 
 ## 1. Jak rozumieć status decyzji
@@ -678,7 +680,9 @@ Nie zamykamy tych punktów samym wyborem frameworka. Pełna lista znaczeń OD po
 
 Istnieją szkielety backendów i frontendu oraz konfiguracja T2. W S1-T3
 zbudowano obrazy, uruchomiono izolowane środowisko Compose i PostgreSQL
-oraz sprawdzono podstawowy zakres testami. Nie dostarczono jeszcze
-funkcji generowania, migracji T4 ani monitora T9. Nie wykonywano płatnych
+oraz sprawdzono podstawowy zakres testami. W S1-T4 zaimplementowano
+i przetestowano dostęp do bazy oraz migracje; ręczny odbiór pozostaje
+oddzielnym krokiem. Nie dostarczono jeszcze funkcji generowania ani
+monitora T9. Nie wykonywano płatnych
 wywołań modeli. Kontrola frontendu w przeglądarce pozostaje niewykonana
 z powodu braku dostępnego narzędzia i uprawnień Computer Use.

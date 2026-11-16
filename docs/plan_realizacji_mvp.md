@@ -629,8 +629,13 @@ dały 26 passed (jedno zastane ostrzeżenie Starlette/httpx), a
 dały 6 passed. Sprawdzono m.in. migracje na osobnych procesach, timeout
 blokady, rollback, brak retry, odzyskanie połączenia, uprawnienia,
 provisioning i obecność migracji w obrazie. Kontrolowane tabele i rewizje
-powstały wyłącznie w izolowanej bazie i kopii migracji. Instrukcję dla
-istniejącego wolumenu i ręcznego odbioru podaje README. Niezależne review
+powstały wyłącznie w izolowanej bazie i kopii migracji. Po review poprawiono
+izolację testów frontendu i procesu HTTP: nie korzystają z lokalnej konfiguracji
+bazy ani nie uruchamiają migracji. Ponowny pełny zestaw API z izolowanym
+PostgreSQL dał 27 passed, jedno istniejące ostrzeżenie; domyślny zestaw
+z testowymi wartościami `APP_DB_*` w środowisku dał 18 passed i 9 pominiętych
+testów PostgreSQL, które uruchamia się osobno. Instrukcję dla istniejącego
+wolumenu i ręcznego odbioru podaje README. Niezależne review
 i ręczny odbiór nie są zastąpione testami automatycznymi.
 
 #### S1-T5 — Przygotować granicę magazynu plików i lokalny adapter
