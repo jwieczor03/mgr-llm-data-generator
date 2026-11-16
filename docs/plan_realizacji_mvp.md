@@ -561,7 +561,10 @@ Komendy testów i kroki ręcznej weryfikacji są w README.
 
 #### S1-T4 — Podłączyć bazę aplikacji i przygotować mechanizm migracji
 
-**Status:** szkic uzgodnionego zakresu; blokady przed implementacją.
+**Status:** realizacja zadania [#19](https://github.com/jwieczor03/mgr-llm-data-generator/issues/19)
+w procesie koordynatora; decyzje techniczne podjęte przez architekta
+16 listopada 2026. Implementację i testy wykonano; niezależne review
+i ręczny odbiór użytkownika pozostają do wykonania.
 
 **Cel:** `application-api` ma fundament połączenia z PostgreSQL
 i wersjonowania struktury, zanim powstaną tabele funkcji biznesowych.
@@ -569,8 +572,9 @@ i wersjonowania struktury, zanim powstaną tabele funkcji biznesowych.
 **Źródło i punkt startowy:** sekcje 13.5–13.6
 [specyfikacji](specyfikacja_mvp.md) i decyzje SQLAlchemy, Psycopg
 oraz Alembic w [rejestrze](ustalenia_architektoniczne.md).
-Kod powstanie w `services/application-api/` z T1. Szczegółowych
-plików adaptera i migracji jeszcze nie uzgodniono.
+Kod powstanie w `services/application-api/` z T1. Szczegóły połączeń, transakcji, uprawnień, blokady i raportu
+`/health/database` określa decyzja architekta z 16 listopada 2026
+w rejestrze ustaleń. Wykonawca dobierze nazwy plików w tym zakresie.
 
 **Zależności:** T1, konfiguracja T2 i kontrakt diagnostyki.
 Do testów potrzebne uzgodnione środowisko PostgreSQL; nie wymaga
@@ -599,10 +603,35 @@ Usunięcie przyczyny bez restartu nie ponawia migracji; restart umożliwia
 kolejną próbę. Wywołania diagnostyki nie wykonują migracji.
 Nie tworzyć tabel testowych w docelowej bazie „na zapas”.
 
-**Do wyjaśnienia:** ochrona przed równoczesnymi migracjami,
-synchroniczny/asynchroniczny dostęp, połączenia, transakcje, uprawnienia,
-parametry konfiguracji, wersje i zgodność oraz środowisko testów.
-Nie rozstrzygać ich przez skopiowanie propozycji modelu danych LLD.
+**Ustalenia techniczne do wykonania:** synchroniczne SQLAlchemy/Psycopg,
+krótkie sesje operacji, migracje w jednej transakcji z blokadą PostgreSQL
+przed inicjalizacją Alembic, osobne konto bez uprawnień administratora
+w schemacie `app` oraz pusta rewizja początkowa. Inicjalizacja konta
+nie należy do migracji. Obraz serwisu zawiera pliki migracji.
+`/health/database` sprawdza połączenie i wersję przez odczyt, bez migracji;
+strażnik capability blokuje zależne operacje. Awaria po udanym starcie
+może ustąpić bez restartu; nieudany start migracji wymaga restartu.
+Pełny kontrakt, limity i uzasadnienia znajdują się w rejestrze.
+
+**Dodatkowe sprawdzenia mechanizmu:** równoległe starty, timeout blokady,
+wycofanie nieudanej rewizji, utrata i odzyskanie bazy, strażnik 503,
+bezpieczny raport, konto bez uprawnień administratora oraz migracje
+w rzeczywistym obrazie. PostgreSQL 18.7 działa w jednorazowym,
+izolowanym środowisku testowym, bez lokalnych danych użytkownika.
+
+**Wynik implementacji 16 listopada 2026:** dodano migracje i adapter
+w `application-api`, diagnostykę oraz provisioning konta i schematu.
+Przypięto SQLAlchemy 2.0.48, Psycopg 3.3.3 i Alembic 1.18.4;
+weryfikację wykonano na Pythonie 3.14.6 i PostgreSQL 18.7. Testy
+`RUN_DATABASE_TESTS=1 uv run --locked --project services/application-api pytest services/application-api/tests -q`
+dały 26 passed (jedno zastane ostrzeżenie Starlette/httpx), a
+`RUN_COMPOSE_TESTS=1 uv run --locked --project services/application-api pytest tests/integration/test_compose.py -q -x`
+dały 6 passed. Sprawdzono m.in. migracje na osobnych procesach, timeout
+blokady, rollback, brak retry, odzyskanie połączenia, uprawnienia,
+provisioning i obecność migracji w obrazie. Kontrolowane tabele i rewizje
+powstały wyłącznie w izolowanej bazie i kopii migracji. Instrukcję dla
+istniejącego wolumenu i ręcznego odbioru podaje README. Niezależne review
+i ręczny odbiór nie są zastąpione testami automatycznymi.
 
 #### S1-T5 — Przygotować granicę magazynu plików i lokalny adapter
 

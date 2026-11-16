@@ -19,3 +19,7 @@
 **/*.pyc
 **/.env
 **/.env.*
+!docker/
+!docker/postgres/
+!docker/postgres/Dockerfile
+!docker/postgres/10-app-role.sh

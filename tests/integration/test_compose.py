@@ -31,7 +31,7 @@ class Stack:
         # Host configuration must not change the test's credentials or project selection.
         self.environment = {
             key: value for key, value in os.environ.items()
-            if not key.startswith(("COMPOSE_", "POSTGRES_"))
+            if not key.startswith(("COMPOSE_", "POSTGRES_", "APP_DB_"))
         }
 
     def run(self, *arguments: str, input: str | None = None) -> str:
@@ -59,10 +59,11 @@ def stack(tmp_path_factory):
     password = secrets.token_hex(24)
     (directory / "database.env").write_text(
         f"POSTGRES_DB=compose_test\nPOSTGRES_USER=compose_test\nPOSTGRES_PASSWORD={password}\n"
+        f"APP_DB_USER=app_user\nAPP_DB_PASSWORD={password}\n"
     )
     (directory / "application-api.env").write_text(
         "APP_DB_HOST=app-db\nAPP_DB_PORT=5432\nAPP_DB_NAME=compose_test\n"
-        f"APP_DB_USER=compose_test\nAPP_DB_PASSWORD={password}\n"
+        f"APP_DB_USER=app_user\nAPP_DB_PASSWORD={password}\n"
         "GENERATION_SERVICE_URL=http://generation-service:8000\n"
         "VALIDATION_SERVICE_URL=http://validation-service:8000\n"
     )
@@ -79,6 +80,8 @@ def stack(tmp_path_factory):
     environment = Stack(directory)
     try:
         environment.run("up", "--build", "-d", "--wait", "--wait-timeout", "90")
+        # First API start may race PostgreSQL initialization; restart after database readiness.
+        environment.run("up", "-d", "--force-recreate", "--no-deps", "--wait", "application-api")
         yield environment
     finally:
         # Only this randomly named test project and its disposable volume are removed.
@@ -93,6 +96,9 @@ def test_real_frontend_assets_and_backend_processes(stack: Stack):
     assert asset_path is not None
     assert stack.get(asset_path[1])[0] == 200
     assert json.loads(stack.get("/health/config")[2])["status"] == "valid"
+    assert json.loads(stack.get("/health/database")[2])["status"] == "ready"
+    stack.run("exec", "-T", "application-api", "python", "-c",
+              "from application_api.database import MIGRATIONS; assert (MIGRATIONS / 'env.py').is_file(); assert (MIGRATIONS / 'versions/0001_initial.py').is_file()")
     for service in BACKENDS:
         response = stack.run(
             "exec", "-T", "application-api", "python", "-c",

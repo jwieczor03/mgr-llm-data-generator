@@ -117,4 +117,6 @@ def require_capabilities(*capabilities: str):
         blocked = [item for item in capabilities if item in request.app.state.config_report["blocked_capabilities"]]
         if blocked:
             raise HTTPException(status_code=503, detail={"code": "configuration_unavailable", "blocked_capabilities": blocked})
+        if "database" in capabilities and request.app.state.database.report()["status"] != "ready":
+            raise HTTPException(status_code=503, detail={"code": "database_unavailable", "blocked_capabilities": ["database"]})
     return dependency
