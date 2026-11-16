@@ -139,7 +139,7 @@ konfiguracja narzędzi powstanie tylko raz. Kroki nie są osobnymi issues.
 | --- | --- | --- |
 | S1-T1 | Utworzyć szkielety frontendu i trzech serwisów backendowych | Podstawa React/TypeScript z Vite i npm na Node.js 26 LTS oraz osobne aplikacje FastAPI na Pythonie 3.14, uruchamiane przez Uvicorn. Każdy backend ma osobny projekt uv. Bez ekranów funkcjonalnych, integracji LLM i walidacji danych. Uzgodniono jeden wspólny układ repozytorium z frontendem w `apps/web/` i backendami w `services/application-api/`, `services/generation-service/`, `services/validation-service/`; katalogi są do utworzenia. Zatwierdzono minimalną strukturę backendów, kontrakt `/health/live`, ekran techniczny, adresy deweloperskie, proxy Vite i minimalny routing. Dokładne wersje dobierze deweloper po przeglądzie i próbie zgodności, bez zmiany uzgodnionego stosu. Pełny opis poniżej przygotowano do przeglądu i akceptacji. |
 | S1-T2 | Przygotować konfigurację i ochronę sekretów | Oddzielenie adresów, poświadczeń i parametrów środowiska od logiki. Każdy backend ma własny lokalny `.env` poza Git i wersjonowany `.env.example` z opisem wymaganych zmiennych, bez prawdziwych sekretów. Odczyt i walidacja przez zatwierdzone Pydantic Settings przy starcie; zmiana konfiguracji wymaga restartu serwisu. Zmienne środowiskowe procesu lub kontenera mają pierwszeństwo przed `.env`. Braki konfiguracji zgłasza tryb diagnostyczny, blokując zależne operacje. Katalog parametrów i raport konfiguracji uzgodniono dla S1-T2; próby zależności należą do T9. |
-| S1-T3 | Przygotować lokalne uruchomienie backendów i baz w Docker Compose | Wspólny start trzech backendów i potrzebnych baz z uzgodnionymi połączeniami i ekspozycją sieciową. Bez publicznego hostingu; nie rozstrzyga izolacji próbnego importu z S7 ani OD-02. Wersje, sieci, wolumeny i sprawdzanie gotowości pozostają do ustalenia. |
+| S1-T3 | Przygotować lokalne uruchomienie backendów i baz w Docker Compose | Dostarczono obrazy trzech backendów, frontend podawany przez API, Compose z bazą, lokalną konfiguracją, dwiema sieciami i trwałym wolumenem. Testy dostarczonego zakresu przeszły. Integracje T4/T5/T9 i odbiór w przeglądarce pozostają otwarte; szczegóły w opisie T3. Bez publicznego hostingu i rozstrzygania OD-02. |
 | S1-T4 | Podłączyć bazę aplikacji i przygotować mechanizm migracji | Techniczna podstawa połączenia i kontrolowanej aktualizacji struktury PostgreSQL aplikacji w `application-api`, przez zatwierdzone SQLAlchemy i Psycopg oraz migracje Alembic, uruchamiane automatycznie wyłącznie w fazie startu tego serwisu. Błąd migracji pozostawia tryb diagnostyczny z przyczyną i blokadą funkcji wymagających bazy; ponowienie wymaga restartu. Bez tabel projektów, schematów i wykonań z dalszych story; bez nadawania generatorowi i walidatorowi dostępu do tej bazy. Migracje nie należą do health checków. Dokładne wersje i zgodność wymagają sprawdzenia; ochrona przed równoczesnym wykonaniem, tryb połączeń i transakcji pozostają do uzgodnienia. |
 | S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Lokalny magazyn za adapterem jest propozycją, nie zatwierdzoną decyzją. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. Kontrakt wymaga uzgodnienia. |
 | S1-T6 | Przygotować lokalny kontekst właściciela i granicę kontroli dostępu | Wymienne źródło kontekstu operacji oraz podstawa sprawdzania dostępu bez logowania. Stały lokalny identyfikator i szczegółowa polityka są propozycjami do decyzji. Podłączenie rzeczywistych zasobów należy do ich story. Bez kont, tokenów logowania i obsługi wielu użytkowników. |
@@ -181,7 +181,7 @@ przekazanie pełnego zakresu do implementacji.
 | --- | --- | --- |
 | [S1-T1 — Szkielety aplikacji](#s1-t1--utworzyć-szkielety-frontendu-i-trzech-serwisów-backendowych) | Brak wcześniejszych zadań | Przegląd opisu; dobór dokładnych wersji i próba zgodności są częścią zadania, w uzgodnionych granicach. |
 | [S1-T2 — Konfiguracja i sekrety](#s1-t2--przygotować-konfigurację-i-ochronę-sekretów) | T1 | Katalog parametrów, walidacja, bezpieczne błędy i wspólny z T9 kontrakt diagnostyki. |
-| [S1-T3 — Lokalne uruchomienie](#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose) | T1, T2, T4; uzgodnione magazyny i integracja T9 | Konfiguracja kontenerów, sieci, wolumenów, gotowości i podawania frontendu. |
+| [S1-T3 — Lokalne uruchomienie](#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose) | T1/T2 wykorzystane; dalsze integracje T4/T5/T9 | Podstawowy zakres zaimplementowany i sprawdzony przez HTTP. Otwarte: integracje T4/T5/T9 i ręczny odbiór w przeglądarce. |
 | [S1-T4 — Baza i migracje](#s1-t4--podłączyć-bazę-aplikacji-i-przygotować-mechanizm-migracji) | T1, T2; kontrakt diagnostyki i środowisko PostgreSQL do testów | Ochrona równoczesnych migracji, połączenia, transakcje, uprawnienia i testy mechanizmu. |
 | [S1-T5 — Granica magazynu plików](#s1-t5--przygotować-granicę-magazynu-plików-i-lokalny-adapter) | T1, T2 | Wybór adaptera i kontraktu, konfiguracja oraz zachowanie błędów i dostępu. |
 | [S1-T6 — Kontekst właściciela i dostęp](#s1-t6--przygotować-lokalny-kontekst-właściciela-i-granicę-kontroli-dostępu) | T1 | Źródło i postać kontekstu oraz polityka dostępu. |
@@ -360,7 +360,12 @@ i środowiska importu ustalimy przy właściwych integracjach.
 
 #### S1-T3 — Przygotować lokalne uruchomienie backendów i baz w Docker Compose
 
-**Status:** szkic uzgodnionego zakresu; blokady przed implementacją.
+**Status — 16 listopada 2026:** dostarczono podstawowy zakres T3:
+obrazy trzech backendów, frontend podawany przez API, Compose z bazą,
+konfiguracją, sieciami i wolumenem. Testy opisano poniżej.
+Pełne kryteria integracyjne z T4, magazynami i T9 pozostają otwarte;
+T3 nie jest oznaczone jako w całości zakończone. Kontrola w przeglądarce
+jest zablokowana brakiem dostępnego narzędzia i uprawnień Computer Use.
 
 **Cel:** uruchomić lokalnie trzy backendy i potrzebne bazy
 we wspólnie skonfigurowanym środowisku, bez obowiązkowego AWS.
@@ -368,7 +373,8 @@ we wspólnie skonfigurowanym środowisku, bez obowiązkowego AWS.
 **Źródło i punkt startowy:** REQ-002, REQ-066–REQ-067
 [specyfikacji](specyfikacja_mvp.md) i decyzja Docker Compose
 w [rejestrze](ustalenia_architektoniczne.md). Konfiguracja kontenerów
-jest do utworzenia; jej lokalizacji nie zatwierdzono.
+znajduje się w `compose.yaml` w katalogu głównym repozytorium
+(decyzja użytkownika z 15 listopada 2026).
 
 **Zależności:** T1, konfiguracja T2, połączenie T4; kontrakty
 wykorzystywanych magazynów i integracja monitora T9 po ich uzgodnieniu.
@@ -377,12 +383,108 @@ wykorzystywanych magazynów i integracja monitora T9 po ich uzgodnieniu.
 1. Przygotować wspólny start backendów i potrzebnych baz przez Compose,
    z połączeniami odpowiadającymi granicom serwisów.
 2. Podłączyć konfigurację bez zapisywania prawdziwych sekretów w repo.
+   Compose wczytuje konfigurację każdego backendu z jego osobnego,
+   lokalnego `.env` w katalogu serwisu (decyzja użytkownika
+   z 15 listopada 2026). Pliki nie trafiają do obrazów; parametry
+   i walidacja wynikają z T2. Zachować uzgodnione pierwszeństwo
+   zmiennych przekazanych przy uruchomieniu kontenera.
+   Dla parametrów samego Compose i bazy aplikacji użyć osobnego,
+   lokalnego `.env` w katalogu głównym repozytorium, poza Git,
+   oraz wersjonowanego `.env.example` bez prawdziwych sekretów
+   (kolejna decyzja użytkownika z 15 listopada 2026). Pliki backendów
+   pozostają osobne. T2 dostarcza katalog `APP_DB_*` i adresów backendów.
+   Główny `.env.example` opisuje `POSTGRES_DB`, `POSTGRES_USER`
+   i `POSTGRES_PASSWORD` do inicjalizacji bazy; nie ustala roli aplikacji z T4.
    Nie dawać generatorowi ani walidatorowi dostępu do bazy aplikacji.
 3. Uwzględnić zwykłe lokalne użycie frontendu podawanego przez
-   `application-api`. Vite pozostaje wyłącznie narzędziem developmentu.
-4. Po rozstrzygnięciu sposobu startu monitora włączyć go do instrukcji
-   środowiska bez uzależniania panelu od działania `application-api`.
+   `application-api`. Zgodnie z decyzją z 15 listopada 2026 użyć
+   wieloetapowego Dockerfile: Node.js buduje frontend, a gotowe pliki
+   trafiają do końcowego obrazu backendu i są podawane przez FastAPI.
+   Vite pozostaje serwerem wyłącznie w developmencie; w obrazie służy
+   do budowania zasobów, nie do ich udostępniania.
+4. Uruchamiać monitor z panelem jako osobną usługę w tym samym Docker
+   Compose, bez uzależniania panelu od działania `application-api`
+   (decyzja użytkownika z 15 listopada 2026). Uwzględnić go w instrukcji.
    Health checki nie mogą uruchamiać migracji.
+5. Publikować na hoście wyłącznie port aplikacji (`application-api`
+   z frontendem) i port panelu monitora, oba na `127.0.0.1`
+   (decyzja użytkownika z 15 listopada 2026). Generator, walidator
+   i baza pozostają bez publikowanych portów, dostępne wewnątrz
+   uzgodnionych sieci Compose. Nie oznacza to dostępu każdego serwisu
+   do wszystkich pozostałych.
+   Domyślny adres aplikacji w Compose to `http://127.0.0.1:8000`
+   (decyzja użytkownika z 15 listopada 2026). Domyślny adres panelu
+   monitora to `http://127.0.0.1:8080` (kolejna decyzja z tej samej daty).
+6. Przechowywać dane PostgreSQL aplikacji w nazwanym wolumenie Docker
+   (decyzja użytkownika z 15 listopada 2026). Zwykłe zatrzymanie
+   i odtworzenie kontenerów zachowuje ten wolumen i dane. Decyzja
+   nie dotyczy magazynu plików ani środowiska próbnego importu.
+7. Deweloper dobiera i przypina dokładne wersje obrazów po sprawdzeniu
+   oficjalnej dokumentacji i próbie zgodności (decyzja użytkownika
+   z 15 listopada 2026). Zachowuje Python 3.14 i Node.js 26.
+   Upoważnienie obejmuje wersję PostgreSQL bazy aplikacji, ale nie
+   środowisko próbnego importu. Konflikt wymagający zmiany ustaleń
+   wraca do użytkownika przed zmianą. Wybrane wersje i wyniki sprawdzeń
+   zapisano poniżej.
+8. Wydzielić sieć bazy aplikacji, do której należą wyłącznie
+   `application-api` i PostgreSQL aplikacji (decyzja użytkownika
+   z 15 listopada 2026). Generator, walidator i monitor nie są do niej
+   podłączone. Monitor odczytuje stan zależności bazy przez diagnostykę
+   `application-api`, bez bezpośredniego połączenia z bazą.
+9. Utworzyć drugą, wspólną sieć komunikacji HTTP dla `application-api`,
+   `generation-service`, `validation-service` i monitora (decyzja
+   użytkownika z 15 listopada 2026). Baza aplikacji nie należy do tej
+   sieci. Monitor odpytuje każdy backend bez pośrednictwa głównego API.
+
+**Szczegóły pozostawione deweloperowi — decyzja z 15 listopada 2026:**
+nazwy sieci i wolumenu, porty wewnętrzne oraz ścieżkę zasobów frontendu
+w obrazie dobiera deweloper, zachowując wszystkie zaakceptowane ustalenia.
+Dobór wersji obrazów podlega warunkom z punktu 7. Delegacja nie obejmuje
+zmiany granic dostępu, kontraktów diagnostyki ani rozstrzygania OD-02.
+
+**Kolejność i stan implementacji:** poniższe etapy opisują realizację
+T3, nie są nowymi zadaniami backlogu. Każdy etap kończy się sprawdzeniem
+wyniku; wykryte problemy należy rozwiązać przed etapem zależnym.
+
+1. **Obrazy i powtarzalne budowanie — wykonane.** Sprawdzić dokumentację i zgodność
+   wersji; przygotować Dockerfile'e backendów i wykluczenia kontekstu
+   budowania. Korzystać z istniejących plików blokad zależności.
+   Rezultat: obrazy trzech backendów, bez lokalnych `.env` i sekretów.
+   Zależność: szkielet T1. Sprawdzenie: build obrazów, testy pytest
+   szkieletów i uruchomienie `/health/live` w każdym kontenerze.
+2. **Frontend w obrazie głównego API — wykonane, sprawdzone przez HTTP.** Dodać etap budowania frontendu
+   i podawanie gotowych zasobów przez FastAPI. Rezultat: frontend i API
+   pod wspólnym adresem, bez serwera Vite. Zależność: etap 1.
+   Sprawdzenie: build bez lokalnego `dist`, testy integracyjne `/`,
+   zasobów, `/health/live` oraz uzgodnionych odpowiedzi 404.
+3. **Podstawowa konfiguracja Compose — wykonana infrastruktura.** Złożyć backendy i bazę aplikacji,
+   podłączyć dwa uzgodnione rodzaje sieci, publikację portów, wolumen
+   i lokalną konfigurację. Rezultat dostarczony w T3: odtwarzalny start,
+   dostęp sieciowy API do portu bazy, odczyt konfiguracji, izolacja sieci
+   i trwałość danych testowych. Zależności: etapy 1–2 i dostarczony T2.
+   Sprawdzono rzeczywisty PostgreSQL przez `psql`; połączenie SQL
+   z kodu aplikacji i jego diagnostyka pozostają do integracji po T4.
+4. **Start i gotowość — częściowo, dalsza integracja po T4/T9.** Wpiąć mechanizmy diagnostyki i migracji
+   dostarczone w T2/T4, bez ich ponownej implementacji w T3.
+   Rezultat: niedostępna zależność lub błąd migracji nie wyłącza
+   diagnostyki backendu. Zależności: etap 3 i uzgodnione kontrakty
+   T2/T4/T9. Sprawdzenie: start z brakującą konfiguracją i niedostępną
+   bazą, błąd migracji oraz potwierdzenie, że diagnostyka jej nie ponawia.
+5. **Integracja monitora i magazynów — oczekuje na T9/T5.** Włączyć dostarczony monitor
+   z panelem do tego samego Compose i podłączyć uzgodnione magazyny.
+   Rezultat: panel niezależny od głównego API i rzeczywiste zależności
+   zamiast atrap. Zależności: etap 4, T9 oraz wykorzystywany zakres T5.
+   Sprawdzenie: panel na porcie 8080 po zatrzymaniu głównego API
+   i dalsze odpytywanie generatora oraz walidatora. Funkcjonalne testy
+   harmonogramu i diagnostyki należą do T9.
+6. **Sprawdzenie środowiska i instrukcja — wykonane dla dostarczonego zakresu.** Uruchomić adekwatną regresję
+   pytest, build frontendu i test całego środowiska przez rzeczywiste
+   HTTP, z izolowanymi danymi. Nie dodawać narzędzi E2E bez uzgodnienia
+   w T7. Rezultat: sprawdzone polecenia w README oraz kroki ręcznego
+   odbioru: start, otwarcie aplikacji i panelu, zatrzymanie głównego API,
+   ponowny start i zachowanie danych bazy. Zależność: etapy 1–5.
+   Końcowe odtworzenie instrukcji i sprawdzenie w przeglądarce pozostaje
+   w T8. Przy przekazaniu rozdzielić testy wykonane od niewykonanych.
 
 **Poza zakresem:** publiczny hosting, wdrożenie AWS, wybór modelu LLM
 i rozstrzygnięcie izolacji próbnego importu z S7/OD-02.
@@ -393,11 +495,69 @@ Otworzyć frontend pod wspólnym adresem z API bez serwera Vite.
 Sprawdzić, że zatrzymanie głównego API nie uniemożliwia odczytu panelu
 monitora. Udokumentować faktyczne polecenia startu i zatrzymania.
 Samo HTTP 200 z `/health/live` nie zalicza sprawdzenia gotowości.
+Sprawdzić również, że tylko aplikacja i panel mają publikowane porty,
+oba związane z `127.0.0.1`; generator, walidator i baza nie mają
+mapowań portów na hosta.
+Zbudować obraz `application-api` bez wcześniejszego lokalnego builda
+frontendu i sprawdzić, że zawiera oraz udostępnia gotowe zasoby.
+Sprawdzić zachowanie uzgodnionych tras i odpowiedzi 404.
+Na izolowanej bazie testowej zapisać dane, zatrzymać i odtworzyć
+kontenery bez usuwania wolumenu, a następnie potwierdzić ich zachowanie.
+Sprawdzić skład sieci bazy i połączenie `application-api` z PostgreSQL;
+generator, walidator i monitor nie mogą łączyć się bezpośrednio z bazą.
+Sprawdzić połączenia HTTP we wspólnej sieci oraz możliwość odpytania
+generatora i walidatora przez monitor po zatrzymaniu `application-api`.
+Sprawdzić odczyt osobnych plików konfiguracji, pierwszeństwo ustawień
+przekazanych przy uruchomieniu oraz brak plików `.env` w obrazach.
+Nie ujawniać wartości sekretów w wynikach sprawdzeń.
 
-**Do wyjaśnienia:** obrazy i wersje, lokalizacja konfiguracji, sieci,
-porty kontenerów, wolumeny, sekrety, gotowość i kolejność startu,
-sposób budowania/podawania frontendu oraz start monitora.
-Nie przenosić portów deweloperskich T1 do Compose jako domniemanej decyzji.
+**Otwarte zależności pełnej integracji:** role, połączenie SQL aplikacji
+i migracje (T4), diagnostyka gotowości (T4/T9), kontrakty pozostałych
+magazynów (T5) oraz obraz, konfiguracja i kontrakty monitora (T9).
+Nie rozstrzygać tych kwestii
+przez wpisanie domyślnych wartości do Compose. Nazwy sieci i wolumenu,
+porty wewnętrzne oraz ścieżka zasobów nie wymagają osobnych decyzji
+użytkownika w ramach powyższej delegacji. Nie przenosić portów
+deweloperskich T1 do Compose jako domniemanej decyzji.
+
+**Dostarczone artefakty:** `compose.yaml`, `.env.example`, `.dockerignore`,
+Dockerfile każdego backendu, podawanie frontendu w `application-api`,
+testy `test_frontend.py` i `tests/integration/test_compose.py` oraz
+instrukcja i kroki ręcznego odbioru w README. Nie zmieniono UI.
+
+**Przyjęte szczegóły wykonawcze:** sieć `services` łączy trzy backendy;
+wewnętrzna sieć `database` łączy tylko API i bazę. Backendy słuchają
+w kontenerach na porcie 8000, PostgreSQL na 5432. Na hoście publikowany
+jest tylko `127.0.0.1:8000`. Wolumen `app-db-data` jest zamontowany
+pod `/var/lib/postgresql`, zgodnie z układem obrazu PostgreSQL 18.
+Frontend trafia do `/app/src/application_api/web` w obrazie API.
+Monitor i port 8080 zostaną dodane po T9, bez atrapy w obecnym Compose.
+Brak `.env` backendu nie blokuje startu. Kontenery backendów nie czekają
+na gotowość zależności; ich health check potwierdza wyłącznie liveness.
+
+**Wersje i źródła:** sprawdzono oficjalne materiały
+[Python](https://github.com/docker-library/python/blob/master/versions.json),
+[Node.js](https://github.com/nodejs/docker-node/blob/main/26/bookworm-slim/Dockerfile),
+[PostgreSQL](https://github.com/docker-library/docs/blob/master/postgres/README.md)
+i [uv](https://docs.astral.sh/uv/guides/integration/docker/).
+Obrazy bazowe: Python 3.14.10 slim-bookworm, Node.js 26.13.1 bookworm-slim,
+uv 0.11.1 i PostgreSQL 18.7 bookworm. Nie zmieniano blokad bibliotek.
+
+**Rzeczywiste sprawdzenia:** zbudowano trzy obrazy i frontend w Dockerze;
+pytest: API 17/17, generator 2/2, walidator 2/2. Testy Compose na osobnym
+projekcie i tymczasowym wolumenie: 6/6. Obejmują działający frontend
+i zasoby, HTTP między backendami, izolację bazy, zachowanie danych po
+odtworzeniu jej kontenera, działanie API przy niedostępnej bazie i bez
+pliku `.env`, pierwszeństwo jawnych ustawień kontenera oraz brak `.env`
+w obrazach. Pierwszy test HTTP na hoście zablokował sandbox; pełny zestaw
+API przeszedł po uruchomieniu z dostępem do lokalnych portów.
+Testy zgłaszają zastane ostrzeżenie o wycofywaniu integracji TestClient
+z httpx. Nie zmieniano zależności poza zakresem T3.
+
+**Niesprawdzone:** renderowanie i interakcja w przeglądarce (brak dostępnej
+przeglądarki automatyzacji i uprawnień Computer Use), integracje T4/T5/T9,
+pełny odbiór T8. Rzeczywiste HTTP nie zastępuje kontroli wyglądu w przeglądarce.
+Komendy testów i kroki ręcznej weryfikacji są w README.
 
 #### S1-T4 — Podłączyć bazę aplikacji i przygotować mechanizm migracji
 
@@ -642,9 +802,10 @@ nie ustalono jeszcze, czy ich obsługa ma należeć do S1-T9.
 
 **Zależności i blokady:** szkielety serwisów S1-T1, konfiguracja
 i ochrona sekretów S1-T2 oraz uzgodniony kontrakt szczegółowej
-diagnostyki backendów. Sposób włączenia monitora do lokalnego uruchomienia
-wymaga uzgodnienia z zakresem S1-T3; nie zatwierdzono kontenera ani
-konkretnego narzędzia harmonogramowania.
+diagnostyki backendów. Uzgodniono 15 listopada 2026 uruchamianie monitora
+z panelem jako osobnej usługi w tym samym Docker Compose (integracja
+w S1-T3), niezależnej od działania `application-api`. Technologia,
+obraz, konfiguracja usługi i narzędzie harmonogramowania pozostają otwarte.
 
 **Kryteria do późniejszej weryfikacji:**
 - Po zatrzymaniu `application-api` panel nadal można otworzyć i odczytać

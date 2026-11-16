@@ -2,11 +2,19 @@
 
 **Data:** 21 października 2026.
 
-**Aktualizacja:** 14 listopada 2026.
+**Aktualizacja:** 16 listopada 2026.
 
 **Status:** zapis dotychczasowych ustaleń i kierunków projektowych. Nie jest potwierdzeniem działania bibliotek ani zgodności konkretnych wersji.
 
 **Podstawa:** [specyfikacja MVP](specyfikacja_mvp.md), rozmowa o technologiach, adapterze LLM i przechowywaniu kontekstu.
+
+**Stan implementacji S1-T3 — 16 listopada 2026:** dostarczono podstawowy
+Compose, obrazy backendów, podawanie frontendu przez API, sieci i wolumen
+bazy. Python 3.14.10, Node.js 26.13.1, uv 0.11.1 i PostgreSQL 18.7
+sprawdzono przez budowanie i testy rzeczywistych kontenerów na macOS arm64.
+Nazwy, ścieżki i wyniki testów zapisano w [planie S1-T3](plan_realizacji_mvp.md#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose).
+Integracje migracji T4, magazynów T5 i monitora T9 nie są dostarczone.
+Wcześniejsze wpisy „nie wykonano” opisują stan w momencie danej decyzji.
 
 ## 1. Jak rozumieć status decyzji
 
@@ -142,6 +150,36 @@ Do rozpisania serwisów wykorzystujemy **wariant A: Python + FastAPI oraz TypeSc
 
 **Kolejna decyzja z 14 listopada 2026 podczas planowania S1:** użytkownik zatwierdził Docker Compose jako podstawowy sposób lokalnego uruchamiania trzech serwisów backendowych i potrzebnych baz. Decyzja nie zatwierdza wersji obrazów, szczegółów sieci i wolumenów, organizacji izolowanego środowiska próbnego importu (OD-02) ani sposobu uruchamiania frontendu i lokalnego modelu.
 
+**Decyzja z 15 listopada 2026 — lokalizacja konfiguracji S1-T3:**
+główny plik Docker Compose będzie miał nazwę `compose.yaml`
+i znajdzie się w katalogu głównym repozytorium. Instrukcja będzie
+opisywać uruchamianie środowiska z tego katalogu. Plik nie został
+jeszcze utworzony; decyzja dotyczy planu implementacji.
+
+**Decyzja z 15 listopada 2026 — trwałość bazy aplikacji w S1-T3:**
+dane PostgreSQL aplikacji przechowujemy w nazwanym wolumenie Docker.
+Zwykłe zatrzymanie i odtworzenie kontenerów zachowuje wolumen i dane.
+Nie rozstrzyga to magazynu plików ani trwałości środowiska próbnego
+importu (OD-02). Nazwa wolumenu i punkt montowania pozostają do
+określenia w konfiguracji. Nie wykonano implementacji ani testu trwałości.
+
+**Decyzja z 15 listopada 2026 — dobór wersji obrazów S1-T3:**
+deweloper dobiera i przypina dokładne wersje obrazów po sprawdzeniu
+oficjalnej dokumentacji i próbie zgodności. Obowiązują Python 3.14
+i Node.js 26. Upoważnienie obejmuje również wersję PostgreSQL bazy
+aplikacji, bez rozstrzygania środowiska próbnego importu (OD-02).
+Ewentualny konflikt wymagający zmiany ustaleń należy przedstawić
+użytkownikowi przed zmianą. Dobór i weryfikacja należą do przyszłej
+implementacji; nie wybrano jeszcze obrazów ani nie wykonano prób.
+
+**Decyzja z 15 listopada 2026 — szczegóły wykonawcze S1-T3:**
+deweloper dobiera nazwy sieci i wolumenu, porty wewnętrzne oraz ścieżkę
+zasobów frontendu w obrazie, przy zachowaniu wszystkich zaakceptowanych
+ustaleń. Te szczegóły nie wymagają osobnego zatwierdzenia. Nie jest to
+zgoda na zmianę granic dostępu, kontraktów diagnostyki ani rozstrzygnięcie
+OD-02. Plan etapów i zależności zapisano w S1-T3 w planie realizacji MVP;
+nie rozpoczęto implementacji.
+
 **Kolejna decyzja z 14 listopada 2026 podczas planowania S1:** użytkownik zatwierdził komunikację między serwisami przez HTTP z danymi JSON i opisem API w OpenAPI. Nie zatwierdzono tym samym konkretnych endpointów, pól, timeoutów, bibliotek klienckich ani zabezpieczeń. Decyzja nie określa sposobu przesyłania plików.
 
 Szczegółowe funkcje, operacje, kontrakty i granice opisano w [serwisach i technologiach](serwisy_i_technologie.md).
@@ -198,8 +236,17 @@ wyłącznie do pracy deweloperskiej nad frontendem; nie dodajemy osobnego
 serwera frontendu do podstawowego sposobu korzystania z aplikacji.
 Decyzja wpływa na S1-T1, S1-T3 i S1-T8. Nie określa konkretnych tras,
 portów, konfiguracji pośredniczenia żądań w development ani zasad
-obsługi brakujących zasobów. Sposób budowania obrazu i zabezpieczenia
-pozostają do doprecyzowania; nie wykonano implementacji.
+obsługi brakujących zasobów. Sposób budowania obrazu rozstrzyga decyzja
+z 15 listopada 2026 poniżej; zabezpieczenia pozostają do doprecyzowania.
+Nie wykonano implementacji podawania frontendu przez backend.
+
+**Decyzja z 15 listopada 2026 — budowanie frontendu w S1-T3:**
+obraz `application-api` powstaje przez wieloetapowy Dockerfile.
+Etap Node.js buduje frontend z `apps/web/`, a gotowe pliki trafiają
+do końcowego obrazu backendu Python i są udostępniane przez FastAPI.
+Nie uruchamiamy serwera Vite podczas zwykłego korzystania z tego obrazu.
+Dokładne obrazy bazowe i lokalizacja plików w obrazie pozostają otwarte.
+Nie wykonano implementacji ani testu budowania.
 
 **Decyzja z 14 listopada 2026 — podział adresów w `application-api`:**
 frontend udostępniamy od `/`, publiczne operacje biznesowe pod
@@ -267,6 +314,22 @@ konfiguracji: błędy walidacji nie mogą bez obsługi kończyć procesu.
 Nie oznacza to wypełniania brakujących sekretów fikcyjnymi wartościami.
 Nie utworzono plików i nie wykonano testów.
 
+**Decyzja z 15 listopada 2026 — podłączenie konfiguracji backendów w S1-T3:**
+Compose wczytuje konfigurację każdego backendu z jego osobnego,
+lokalnego `.env` w katalogu serwisu, bez kopiowania tych plików do
+obrazów. Zachowujemy wymagania T2 dotyczące walidacji, ochrony sekretów
+i pierwszeństwa zmiennych przekazanych przy uruchomieniu kontenera.
+Nie rozstrzyga to konfiguracji monitora. Organizację plików Compose
+i bazy opisuje kolejna decyzja. Nie wykonano implementacji ani testów odczytu.
+
+**Decyzja z 15 listopada 2026 — pliki konfiguracji Compose i bazy w S1-T3:**
+parametry samego Compose i bazy aplikacji będą w lokalnym `.env`
+w katalogu głównym repozytorium, poza Git. Towarzyszy mu wersjonowany
+`.env.example` bez prawdziwych sekretów. Każdy backend zachowuje osobne
+pliki konfiguracji z T2. Nie ustalono jeszcze katalogu parametrów ani
+szczegółów przekazywania poświadczeń bazy do `application-api`.
+Nie utworzono plików ani nie wykonano testów konfiguracji.
+
 **Decyzja z 14 listopada 2026 — dostęp do bazy i migracje S1-T4:**
 zatwierdzono SQLAlchemy i Psycopg do obsługi PostgreSQL aplikacji
 w `application-api` oraz Alembic do wersjonowanych zmian struktury
@@ -325,8 +388,45 @@ backendów. Sprawdza także `application-api`, aby wykrywać jego
 zatrzymanie; nie może polegać wyłącznie na zbiorczym raporcie tego API.
 Każdy backend nadal diagnozuje własne bezpośrednie zależności,
 a `application-api` zachowuje wcześniej uzgodnioną agregację.
-Nie wybrano narzędzia, technologii ani sposobu uruchomienia monitora.
+Nie wybrano narzędzia ani technologii monitora. Sposób uruchomienia
+rozstrzyga poniższa decyzja z 15 listopada 2026.
+
+**Decyzja z 15 listopada 2026 — uruchomienie monitora w S1-T3:**
+monitor z panelem diagnostycznym będzie osobną usługą w tym samym
+Docker Compose co backendy i bazy. Panel pozostaje dostępny niezależnie
+od działania `application-api`. Akceptacja dotyczy sposobu uruchomienia;
+technologia, obraz, porty, sieci i pozostała konfiguracja usługi
+pozostają do uzgodnienia. Nie wykonano implementacji.
 Osobny proces nie oznacza odporności na awarię całego hosta.
+
+**Decyzja z 15 listopada 2026 — ekspozycja usług S1-T3:**
+na hoście publikujemy wyłącznie port aplikacji (`application-api`
+z frontendem) i port panelu monitora, oba na `127.0.0.1`.
+Generator, walidator i baza nie mają publikowanych portów;
+korzystają z połączeń wewnątrz uzgodnionych sieci Compose.
+Nie przyznaje to generatorowi ani walidatorowi dostępu do bazy aplikacji.
+Domyślny adres aplikacji w Compose to `http://127.0.0.1:8000`
+(kolejna decyzja użytkownika z 15 listopada 2026). Domyślny adres panelu
+monitora to `http://127.0.0.1:8080` (następna decyzja z tej samej daty).
+Porty wewnętrzne pozostają otwarte; podział sieci opisano poniżej.
+Nie wykonano implementacji ani testów ekspozycji.
+
+**Decyzja z 15 listopada 2026 — sieć bazy aplikacji w S1-T3:**
+baza aplikacji i `application-api` będą połączone osobną siecią Compose,
+do której należą wyłącznie te dwie usługi. Generator, walidator
+i monitor nie są do niej podłączone i nie mają bezpośredniego połączenia
+z bazą. Stan zależności bazy monitor odczytuje przez diagnostykę
+`application-api`, zgodnie z zasadą sprawdzania bezpośrednich zależności
+przez backend. Sieć komunikacji HTTP opisuje kolejna decyzja.
+Nie wykonano implementacji ani testów izolacji.
+
+**Decyzja z 15 listopada 2026 — sieć komunikacji HTTP w S1-T3:**
+druga, wspólna sieć Compose łączy trzy backendy (`application-api`,
+`generation-service`, `validation-service`) i monitor. Baza aplikacji
+nie jest do niej podłączona. Monitor odpytuje każdy backend niezależnie,
+bez wymagania działania `application-api`. Decyzja nie rozstrzyga
+środowiska próbnego importu ani kontraktów i zabezpieczeń HTTP.
+Nie wykonano implementacji ani testów połączeń.
 
 **Kolejna decyzja z 14 listopada 2026 — niezależny panel monitora:**
 wyniki monitorowania są dostępne w osobnym panelu w przeglądarce.
@@ -475,4 +575,9 @@ Nie zamykamy tych punktów samym wyborem frameworka. Pełna lista znaczeń OD po
 
 ## 6. Co zostało wykonane
 
-Zapisano dokumentację i sprawdzono jej spójność. Nie zaimplementowano serwisów, nie zainstalowano pakietów, nie utworzono baz, nie pobrano modeli i nie wykonano płatnych wywołań.
+Istnieją szkielety backendów i frontendu oraz konfiguracja T2. W S1-T3
+zbudowano obrazy, uruchomiono izolowane środowisko Compose i PostgreSQL
+oraz sprawdzono podstawowy zakres testami. Nie dostarczono jeszcze
+funkcji generowania, migracji T4 ani monitora T9. Nie wykonywano płatnych
+wywołań modeli. Kontrola frontendu w przeglądarce pozostaje niewykonana
+z powodu braku dostępnego narzędzia i uprawnień Computer Use.
