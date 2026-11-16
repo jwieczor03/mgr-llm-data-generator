@@ -110,6 +110,112 @@ promptowania w głównym zakresie.
 
 Lista nierozstrzygniętych szczegółów znajduje się w sekcji 16 specyfikacji. Nie należy zastępować tych decyzji założeniami zaczerpniętymi z archiwum.
 
+## Lokalne uruchomienie przez Docker Compose — S1-T3
+
+Ten zakres uruchamia trzy backendy i PostgreSQL aplikacji. Gotowy frontend
+udostępnia `application-api` pod `http://127.0.0.1:8000`, bez serwera Vite.
+To nadal fundament aplikacji: połączenie backendu z bazą i migracje należą
+do T4, a monitor z panelem na porcie 8080 do T9. Nie są jeszcze dostarczone.
+
+Potrzebny jest działający Docker z Compose co najmniej 2.24.4. Nie trzeba
+instalować Pythona ani Node.js na hoście. Z katalogu głównego repozytorium
+przygotuj lokalne pliki konfiguracji; `cp -n` zachowuje istniejące pliki:
+
+```sh
+cp -n .env.example .env
+cp -n services/application-api/.env.example services/application-api/.env
+cp -n services/generation-service/.env.example services/generation-service/.env
+cp -n services/validation-service/.env.example services/validation-service/.env
+```
+
+W głównym `.env` wpisz własne `POSTGRES_PASSWORD`. `POSTGRES_DB` i
+`POSTGRES_USER` określają inicjalizowaną bazę i konto administracyjne;
+nie rozstrzygają docelowych uprawnień aplikacji z T4. Te parametry działają
+przy inicjalizacji pustego wolumenu, nie zmieniają hasła istniejącego konta.
+
+Każdy backend otrzymuje wyłącznie swój plik `.env`. Brak pliku lub wymaganych
+ustawień backendu nie blokuje startu jego diagnostyki. Dla `application-api`
+można ustawić adresy infrastruktury Compose:
+
+```dotenv
+APP_DB_HOST=app-db
+APP_DB_PORT=5432
+GENERATION_SERVICE_URL=http://generation-service:8000
+VALIDATION_SERVICE_URL=http://validation-service:8000
+```
+
+Pozostałe wymagane pola opisuje sekcja konfiguracji backendów. Główny `.env`
+nie uzupełnia automatycznie `APP_DB_*`. Bez pełnej konfiguracji raport
+`/health/config` ma status `invalid`; frontend i `/health/live` nadal działają.
+Nawet status `valid` nie potwierdza połączenia backendu z bazą — tej integracji
+jeszcze nie ma. Generator, walidator i baza nie mają portów publikowanych
+na hoście. Baza jest w osobnej sieci dostępnej tylko dla `application-api`.
+
+Po uzupełnieniu hasła bazy uruchom:
+
+```sh
+docker compose config --quiet
+docker compose up -d --build --wait
+docker compose ps
+curl --fail http://127.0.0.1:8000/health/live
+curl --fail http://127.0.0.1:8000/health/config
+```
+
+Otwórz `http://127.0.0.1:8000`. Oczekiwanie `--wait` sprawdza działanie
+procesów backendów i gotowość PostgreSQL, nie gotowość funkcji biznesowych.
+Backendy nie czekają na gotowość bazy, aby móc udostępnić diagnostykę
+również przy jej awarii. Brak hasła uniemożliwia start nowej bazy;
+przyczynę sprawdzisz przez `docker compose logs --tail 50 app-db`.
+
+Zmiana pliku `.env` w tym trybie wymaga odtworzenia danego kontenera,
+ponieważ Compose przekazuje ustawienia do środowiska przy jego tworzeniu:
+
+```sh
+docker compose up -d --force-recreate application-api
+```
+
+Zwykłe zatrzymanie, ponowny start i usunięcie kontenerów bez kasowania danych:
+
+```sh
+docker compose stop
+docker compose up -d --wait
+docker compose down
+```
+
+Nazwany wolumen `app-db-data` zachowuje dane po tych operacjach. Usunięcie
+wolumenu usuwa dane bazy i nie jest częścią zwykłego zatrzymania.
+Pliki `.env`, zależności hosta i dane nie trafiają do kontekstu budowania.
+Obrazy korzystają z Python 3.14.10, Node.js 26.13.1 tylko podczas budowania
+frontendu, uv 0.11.1 i PostgreSQL 18.7. Biblioteki są instalowane z blokad.
+
+### Sprawdzenie i ręczny odbiór S1-T3
+
+1. Uruchom środowisko powyższymi poleceniami i otwórz stronę startową.
+2. Sprawdź `/health/live`, `/health/config` i `/api/v1/nieznany`.
+   Ostatni adres ma zwrócić JSON 404. Nieznana strona i brakujący plik
+   również zwracają 404 zamiast strony startowej.
+3. Wykonaj `docker compose stop app-db`. Frontend i oba endpointy
+   diagnostyczne powinny nadal odpowiadać. Raport konfiguracji nie służy
+   do wykrywania tej awarii. Przywróć bazę przez `docker compose up -d app-db`.
+4. Zmień parametr backendu, odtwórz jego kontener i sprawdź nowy raport.
+5. Zatrzymaj i uruchom środowisko ponownie. Port 8080 pozostaje niedostępny
+   do czasu dostarczenia T9; migracje i połączenie aplikacji z bazą sprawdzimy
+   po T4. Ten odbiór nie potwierdza tych przyszłych integracji.
+
+Automatyczne testy rzeczywistych kontenerów uruchom osobno:
+
+```sh
+RUN_COMPOSE_TESTS=1 uv run --project services/application-api pytest tests/integration/test_compose.py -v
+```
+
+Testy budują obrazy, używają własnej konfiguracji i losowo nazwanego projektu,
+tymczasowego portu oraz osobnego wolumenu. Sprawdzają frontend, komunikację
+backendów, izolację bazy, trwałość danych po odtworzeniu kontenera, start
+bez `.env` backendu, pierwszeństwo jawnie przekazanych ustawień kontenera
+i brak `.env` w obrazach. Po wykonaniu usuwają wyłącznie swoje kontenery
+i testowy wolumen. Nie wymagają wypełniania lokalnych plików `.env`.
+Bez `RUN_COMPOSE_TESTS=1` ten zestaw jest pomijany.
+
 ## Szkielet deweloperski S1-T1
 
 Repozytorium zawiera początkowe szkielety trzech serwisów i frontendu. Nie są one jeszcze gotową aplikacją. Do uruchomienia potrzebne są Python 3.14, uv oraz Node.js 26 i npm. Sprawdzono Python 3.14.6, uv 0.11.1, Node.js 26.13.0 i npm 11.20.0. Wersje bibliotek znajdują się w deklaracjach i plikach blokad poszczególnych projektów.

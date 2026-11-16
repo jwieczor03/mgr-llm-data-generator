@@ -1,0 +1,21 @@
+# Allow only application inputs; local configuration and data never enter the context.
+**
+!services/
+!services/*/
+!services/*/pyproject.toml
+!services/*/uv.lock
+!services/*/src/
+!services/*/src/**
+!apps/
+!apps/web/
+!apps/web/package.json
+!apps/web/package-lock.json
+!apps/web/index.html
+!apps/web/tsconfig.json
+!apps/web/vite.config.ts
+!apps/web/src/
+!apps/web/src/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*

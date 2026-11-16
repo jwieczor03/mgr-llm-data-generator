@@ -484,6 +484,31 @@ Późniejsze skalowanie wymieni runner i politykę przydziału, doda rzeczywist�
 
 ## 11. Lokalne uruchomienie i granice bezpieczeństwa
 
+**Zatwierdzone 15 listopada 2026 w S1-T3:** główna konfiguracja będzie
+w pliku `compose.yaml` w katalogu głównym repozytorium. Z tego katalogu
+uruchamiamy środowisko. Podstawowy zakres dostarczono 16 listopada 2026;
+komendy i ograniczenia opisano w README.
+
+**Adresy — zatwierdzone 15 listopada 2026 w S1-T3:**
+domyślny adres aplikacji w Compose to `http://127.0.0.1:8000`,
+a niezależnego panelu monitora — `http://127.0.0.1:8080`.
+Frontend na porcie 8000 sprawdzono przez rzeczywiste HTTP.
+Panel nie jest jeszcze dostarczony; jego adres pozostaje ustaleniem do T9.
+Porty wewnętrzne dobiera deweloper zgodnie z delegacją opisaną poniżej.
+
+**Szczegóły wykonawcze — zatwierdzone 15 listopada 2026 w S1-T3:**
+deweloper dobiera nazwy sieci i wolumenu, porty wewnętrzne oraz ścieżkę
+zasobów frontendu w obrazie, zachowując zaakceptowane ustalenia.
+Kontrakty diagnostyki, magazynów i pozostałe otwarte decyzje nie są
+objęte tą delegacją. Kolejność implementacji, zależności i planowane
+sprawdzenia zawiera [plan S1-T3](plan_realizacji_mvp.md#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose).
+
+**Trwałość bazy aplikacji — zatwierdzone 15 listopada 2026 w S1-T3:**
+dane PostgreSQL aplikacji będą w nazwanym wolumenie Docker, zachowywanym
+po zwykłym zatrzymaniu i odtworzeniu kontenerów. Nie jest to decyzja
+o magazynie plików ani środowisku próbnego importu. Trwałość potwierdzono
+testem na osobnej bazie po odtworzeniu kontenera.
+
 Docker Compose zatwierdzono jako podstawowy sposób lokalnego uruchamiania backendów i potrzebnych baz. Proponowana konfiguracja opisuje `application-api`, `generation-service`, `validation-service`, `app-db` i warunkowy `validation-db`; jej szczegóły nadal wymagają uzgodnienia, w tym OD-02. Compose służy do złożenia zależności, a nie zastępuje systemu zadań i bezpieczeństwa SQL [T19].
 
 **Zatwierdzone 14 listopada 2026 — bezpośrednie uruchomienie deweloperskie
@@ -494,13 +519,15 @@ portów kontenerów oraz konfiguracji przekazywania żądań przez Vite.
 Uruchomienia nie sprawdzono.
 
 - Zatwierdzono 14 listopada 2026: podczas zwykłego lokalnego korzystania `application-api` udostępnia zbudowane zasoby `web` i API pod jednym adresem. Frontend od `/`, publiczne operacje biznesowe pod `/api/v1`, osobna trasa techniczna `/health/live`. Osobny serwer Vite służy tylko do pracy deweloperskiej; nie dodajemy osobnego serwera frontendu do podstawowego sposobu korzystania z aplikacji. Docelowa nawigacja i konfiguracja Compose pozostają do ustalenia; minimalny routing szkieletu opisano poniżej; adresy bezpośredniego uruchomienia deweloperskiego opisano powyżej, a uzgodnione proxy Vite poniżej.
-- Publiczny lokalny punkt wejścia wiążemy z loopbackiem. Generator, walidator i bazy nie mają domyślnie portów dostępnych z zewnątrz.
+- Zatwierdzono 15 listopada 2026 w S1-T3: na hoście publikujemy wyłącznie aplikację (`application-api` z frontendem) i panel monitora, oba na `127.0.0.1`. Generator, walidator i baza nie mają publikowanych portów. Dostarczona aplikacja używa portu hosta 8000; port 8080 zostanie dodany z monitorem T9. Wszystkie backendy wewnątrz Compose używają portu 8000, a baza 5432. Monitor ma być osobną usługą w tym samym Compose, niezależną od działania `application-api`.
+- Dostarczony w S1-T3 wieloetapowy Dockerfile buduje frontend w etapie Node.js i kopiuje zasoby do `/app/src/application_api/web` w obrazie API. Udostępnia je FastAPI bez serwera Vite. Wybrane i sprawdzone wersje obrazów zapisano w planie T3; nie zmieniano blokad bibliotek.
 - Sieć aplikacji i środowiska walidacji rozdzielamy: walidator ma dostęp do własnej bazy i ograniczonego API plików, nie `app-db`.
+- Zatwierdzono 15 listopada 2026 w S1-T3: osobna sieć bazy aplikacji łączy wyłącznie `application-api` i PostgreSQL aplikacji. Generator, walidator i monitor nie są do niej podłączone. Monitor otrzymuje stan zależności bazy przez diagnostykę `application-api`, bez bezpośredniego połączenia z bazą. Druga, wspólna sieć komunikacji HTTP łączy trzy backendy i monitor, bez bazy aplikacji; monitor odpytuje każdy backend niezależnie. Szczegóły konfiguracji sieci pozostają do określenia, a środowisko próbnego importu nadal podlega OD-02.
 - Tylko generator potrzebuje połączenia do dopuszczonych API LLM. Adresy i sekrety pochodzą z konfiguracji, nie z treści od modelu.
 - Walidacyjny PostgreSQL nie ma dostępu do bazy aplikacji, danych hosta ani zewnętrznych usług. Dokładne ograniczenia sieci i zasobów wymagają testu wdrożenia.
 - Magazyn projektów i artefaktów jest przypisany backendowi. Nie tworzymy wolumenu archiwum wykonań. Zdarzenia z REQ-074, także odświeżenie i zamknięcie strony, kończą dostęp do rozmowy i plików. Mechanizm zakończenia dostępu i fizyczne sprzątanie wymagają OD-09; brak dostępnego pliku nie może być maskowany pustym wynikiem.
 - Natywna Ollama na macOS jest zależnością poza Compose; adres dostępu z kontenera ustalimy i sprawdzimy w konfiguracji danego środowiska.
-- Wersje przypinamy po próbie zgodności; bez ruchomych obrazów `latest`.
+- Zatwierdzono 15 listopada 2026 w S1-T3: deweloper dobiera i przypina dokładne wersje obrazów po sprawdzeniu oficjalnej dokumentacji i próbie zgodności, z zachowaniem Pythona 3.14 i Node.js 26. Dotyczy to również PostgreSQL bazy aplikacji, bez rozstrzygania środowiska próbnego importu. Konflikt wymagający zmiany ustaleń wraca do użytkownika przed zmianą. Nie używamy ruchomych obrazów `latest`. Dobór i próby pozostają do wykonania.
 
 Wariant bez logowania nie jest konfiguracją gotową do publicznego hostowania.
 
@@ -538,6 +565,20 @@ bez nieobsłużonego zatrzymania procesu i bez fikcyjnych sekretów.
 Ustalenie nie obejmuje konfiguracji frontendu ani monitora.
 Nie utworzono plików ani nie sprawdzono odczytu konfiguracji.
 
+**Podłączenie konfiguracji — zatwierdzone 15 listopada 2026 w S1-T3:**
+Compose wczytuje konfigurację każdego backendu z jego osobnego,
+lokalnego `.env` w katalogu serwisu. Pliki nie trafiają do obrazów.
+Obowiązują walidacja i pierwszeństwo ustawień przekazanych przy
+uruchomieniu kontenera z T2. Dla parametrów samego Compose i bazy
+aplikacji zatwierdzono osobny, lokalny `.env` w katalogu głównym,
+poza Git, i wersjonowany `.env.example` bez prawdziwych sekretów.
+Pliki backendów pozostają osobne. T2 określa `APP_DB_*` i adresy usług,
+a główny `.env.example` określa `POSTGRES_DB`, `POSTGRES_USER`
+i `POSTGRES_PASSWORD` do inicjalizacji bazy. Nie są one automatycznie
+kopiowane do konfiguracji API. Role i połączenie aplikacji należą do T4,
+a konfiguracja monitora do T9. Odczyt konfiguracji kontenerów sprawdzono
+testami T3, w tym brak pliku i pierwszeństwo jawnych ustawień.
+
 **Konfiguracja — zatwierdzone w S1-T2:** brak lub błędna wartość
 wymaganej konfiguracji powoduje uruchomienie trybu diagnostycznego.
 Health check wskazuje przyczyny i ograniczenia bez wartości sekretów,
@@ -564,11 +605,13 @@ Zatwierdzono osobny proces monitora,
 niezależny od trzech backendów, sprawdzający również `application-api`.
 Monitor nie polega wyłącznie na agregacji w `application-api`, dzięki
 czemu ma wykrywać również zatrzymanie tego procesu. Narzędzie, technologia,
-sposób uruchomienia i szczegóły interfejsu monitora pozostają otwarte.
+szczegóły interfejsu monitora pozostają otwarte. Sposób uruchomienia
+ustalono w S1-T3: osobna usługa w tym samym Compose.
 Zatwierdzono osobny panel wyników w przeglądarce, dostępny również
 przy niedziałającej głównej aplikacji. Udostępnianie panelu i odczyt
 wyników nie mogą zależeć od działania `application-api`.
-Wygląd, adres i zabezpieczenia panelu pozostają do uzgodnienia.
+Wygląd i zabezpieczenia panelu pozostają do uzgodnienia. Domyślny adres
+panelu ustalono w S1-T3: `http://127.0.0.1:8080`.
 Panel ma udostępniać przycisk „Sprawdź teraz”, uruchamiający nową,
 bezpłatną i niedestrukcyjną diagnostykę bez czekania na kontrolę okresową.
 Nie jest to samo odświeżenie wyniku ani uruchomienie płatnej próby LLM.
@@ -599,7 +642,7 @@ Nie wykonano implementacji, testów ani płatnych prób.
 | Timeouty, anulowanie i cykl życia danych — OD-07–OD-09 | Nie można dopisać gwarancji przerwania u dostawcy ani dostępności niesprawdzonych artefaktów. Pobranie po przerwaniu dotyczy nadal dostępnego czatu. REQ-074–REQ-075 określają utratę dostępu także po odświeżeniu lub zamknięciu strony i ostrzeżenie. Opuszczenie czatu ma anulować trwające wykonanie, a pozostanie po ostrzeżeniu go nie anuluje (REQ-077). Techniczne wykrycie wyjścia i przekazanie anulowania, moment potwierdzenia zatrzymania, mechanizm zakończenia dostępu i fizyczne sprzątanie pozostają otwarte. |
 | Prototyp runnera | Potwierdzenie statusu, anulowania, restartu i braku drugiego wywołania. |
 | Prototyp LiteLLM i przegląd wersji | Dowód wymaganego śladu, możliwości, metryk i braku ukrytych ponowień. |
-| Szczegóły lokalnego uruchomienia | Python/FastAPI, React/TypeScript, trzy osobne serwisy backendowe i Docker Compose dla backendów oraz potrzebnych baz zatwierdzono 14 listopada 2026. Wersje obrazów, konfiguracja sieci i wolumenów oraz sposób uruchamiania frontendu nadal wymagają uzgodnienia. |
+| Dalsza integracja lokalnego uruchomienia | Podstawowy Compose, obrazy, sieci, wolumen bazy i frontend dostarczono w S1-T3. Pozostają połączenie aplikacji i migracje T4, magazyny T5 oraz monitor T9. Wyniki i ograniczenia sprawdzeń są w planie T3. |
 
 Można rozpocząć projektowanie kontraktów i testów rdzenia na atrapach bez rozstrzygnięcia wszystkich szczegółów. Nie należy jednak nazywać gotową walidacją fragmentu, którego zakres pozostaje otwarty.
 

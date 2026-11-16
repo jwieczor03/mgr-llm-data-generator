@@ -1,0 +1,64 @@
+x-backend-health: &backend-health
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+  interval: 10s
+  timeout: 3s
+  start_period: 5s
+  retries: 3
+
+services:
+  application-api:
+    build:
+      context: .
+      dockerfile: services/application-api/Dockerfile
+    env_file:
+      - path: ./services/application-api/.env
+        required: false
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks: [services, database]
+    healthcheck: *backend-health
+    # Diagnostics must start even when the database or another backend cannot start.
+
+  generation-service:
+    build:
+      context: .
+      dockerfile: services/generation-service/Dockerfile
+    env_file:
+      - path: ./services/generation-service/.env
+        required: false
+    networks: [services]
+    healthcheck: *backend-health
+
+  validation-service:
+    build:
+      context: .
+      dockerfile: services/validation-service/Dockerfile
+    env_file:
+      - path: ./services/validation-service/.env
+        required: false
+    networks: [services]
+    healthcheck: *backend-health
+
+  app-db:
+    image: postgres:18.7-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB-}
+      POSTGRES_USER: ${POSTGRES_USER-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD-}
+    volumes:
+      - app-db-data:/var/lib/postgresql
+    networks: [database]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+
+networks:
+  services:
+  database:
+    internal: true
+
+volumes:
+  app-db-data:
