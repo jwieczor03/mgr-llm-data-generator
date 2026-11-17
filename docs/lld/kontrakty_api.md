@@ -75,8 +75,18 @@ Kontrola automatyczna jest przy starcie i co 30 minut, a ręczna nie zmienia
 harmonogramu. Jednocześnie działa jedna kontrola. Kolizja z automatyczną
 powoduje wykonanie jednej oczekującej kontroli po zakończeniu bieżącej.
 
-Raporty nie zawierają sekretów ani surowych odpowiedzi upstream. Monitor
-ogranicza czas i rozmiar odpowiedzi; nie uruchamia operacji LLM. Nie ma
+Raporty nie zawierają sekretów ani surowych odpowiedzi upstream. Odbiorca
+wymaga dokładnego katalogu prób właściwego dla serwisu, bez powtórzeń;
+niepełny lub sprzeczny raport oznacza `invalid_report`. Błędny adres lub
+wyjątek jednej próby nie zastępuje wyników pozostałych serwisów.
+
+Próby bazy, magazynu i obu usług w API ruszają równolegle. Każda ma
+maksymalnie 6 sekund oczekiwania; dla raportu API przewidziano do 8 sekund.
+Monitor czeka na API do 10 sekund (w tym timeout odczytu HTTP 10 sekund),
+a na każdy pozostały serwis do 6 sekund (odczyt 5 sekund). Połączenie ma
+limit 2 sekund, odpowiedź 64 KiB, a runda 30 sekund. Timeout oczekiwania
+na lokalną próbę nie zatrzymuje wykonywanego już wątku ani jego sprzątania.
+Monitor nie uruchamia operacji LLM. Nie ma
 logowania i jest przeznaczony do lokalnego użycia. Host jest ograniczony do
 lokalnych nazw, POST sprawdza nagłówek i Origin, a CORS nie jest włączony.
 Dawna propozycja `/internal/v1/health/ready` nie jest kontraktem T9.

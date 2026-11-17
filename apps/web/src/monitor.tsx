@@ -14,38 +14,51 @@ export function Monitor() {
   const [report, setReport] = useState<Report | null>(null);
   const [offline, setOffline] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [awaiting, setAwaiting] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const [dark, setDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
   const [now, setNow] = useState(Date.now());
   const wasInProgress = useRef(false);
+  const latestReport = useRef<Report | null>(null);
+  const pendingRun = useRef<{ id: string; checkedAt: string | null } | null>(null);
   const refresh = useCallback(async () => {
     try {
       const response = await fetch('/api/v1/report', { cache: 'no-store' });
       if (!response.ok) throw new Error();
       const data: Report = await response.json();
-      if (wasInProgress.current && !data.in_progress) setAnnouncement('Kontrola zakończona. Wyniki zaktualizowano.');
+      const completedManual = pendingRun.current && !data.in_progress && data.checked_at !== pendingRun.current.checkedAt;
+      if (!data.in_progress && (wasInProgress.current || completedManual)) {
+        setAnnouncement('Kontrola zakończona. Wyniki zaktualizowano.');
+        pendingRun.current = null;
+        setAwaiting(false);
+      }
       wasInProgress.current = data.in_progress;
+      latestReport.current = data;
       setReport(data);
       setOffline(false);
     } catch { setOffline(true); }
     setNow(Date.now());
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { const id = window.setInterval(() => { void refresh(); }, report?.in_progress || starting ? 2000 : 15000); return () => window.clearInterval(id); }, [refresh, report?.in_progress, starting]);
+  useEffect(() => { const id = window.setInterval(() => { void refresh(); }, report?.in_progress || starting || awaiting ? 2000 : 15000); return () => window.clearInterval(id); }, [refresh, report?.in_progress, starting, awaiting]);
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }, [dark]);
   const run = async () => {
+    const previousCheckedAt = latestReport.current?.checked_at ?? null;
     setStarting(true); setAnnouncement('Kontrola w toku');
     try {
       const response = await fetch('/api/v1/check', { method: 'POST', headers: { 'X-Monitor-Request': '1' } });
       if (response.status !== 202 && response.status !== 409) throw new Error();
+      const result: { run_id: string } = await response.json();
+      pendingRun.current = { id: result.run_id, checkedAt: previousCheckedAt };
+      setAwaiting(true);
       await refresh();
     } catch { setAnnouncement('Nie udało się uruchomić kontroli. Spróbuj ponownie.'); }
     finally { setStarting(false); }
   };
   const stale = !!report?.checked_at && (report.freshness === 'stale' || now - Date.parse(report.checked_at) > 1830000);
-  const busy = starting || !!report?.in_progress;
+  const busy = starting || (!offline && (!!report?.in_progress || awaiting));
   return <main><header><div><h1>Stan serwisów</h1><p>Diagnostyka fundamentu aplikacji. Wyniki nie potwierdzają gotowości do generowania danych.</p></div><div className="actions"><button className="theme" onClick={() => setDark(!dark)}>{dark ? 'Włącz jasny motyw' : 'Włącz ciemny motyw'}</button><button className="primary" onClick={() => void run()} disabled={busy}>{busy ? 'Trwa sprawdzanie…' : 'Sprawdź teraz'}</button></div></header>
-    <p className="announce" role="status" aria-live="polite">{busy ? 'Kontrola w toku' : announcement}</p>
+    <p className="announce" role="status" aria-live="polite">{offline ? 'Nie można potwierdzić stanu kontroli.' : busy ? 'Kontrola w toku' : announcement}</p>
     {offline && <p className="notice">Nie można odczytać wyników monitora. Sprawdź, czy usługa monitora działa. {report && 'Ostatni odebrany wynik — aktualny stan nieznany.'}</p>}
     <section className="summary"><h2>Stan fundamentu</h2><p className={'badge ' + (!stale && !offline && report?.capacity ? report.capacity : '')}>{stale || offline ? 'Ostatni znany wynik: ' : ''}{report?.capacity ? labels[report.capacity] : 'Jeszcze nie sprawdzono'}</p>{stale && <p className="notice">Wynik jest nieaktualny. Uruchom nową kontrolę. Wynik nieaktualny.</p>}<dl><div><dt>Ostatnia zakończona kontrola</dt><dd>{date(report?.checked_at ?? null)}</dd></div><div><dt>Następna kontrola automatyczna</dt><dd>{report ? date(report.next_automatic_at) : 'Nieznana'}</dd></div><div><dt>Aktualność wyniku</dt><dd>{offline ? 'Nieznana' : stale ? 'Wynik nieaktualny' : report?.freshness === 'fresh' ? 'Aktualny' : 'Jeszcze nie sprawdzono'}</dd></div></dl></section>
     {report?.limitations.some(item => item.startsWith('Harmonogram monitora')) && <p className="notice">Harmonogram monitora nie działa. Uruchom monitor ponownie.</p>}

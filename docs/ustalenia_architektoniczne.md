@@ -874,3 +874,12 @@ wynik jest nieaktualny po 1830 sekundach. Panel ogranicza Host i Origin,
 a POST wymaga nagłówka; nie jest to ochrona przed lokalnym procesem.
 Magazyn zapisuje i usuwa własny plik próbny, nie jest to test tylko do
 odczytu; błąd usunięcia jest zgłaszany. Kontrakt w [LLD](lld/kontrakty_api.md).
+
+**Korekta po review PR #44:** decyzja architekta z 17 listopada 2026
+ustala równoległe próby czterech zależności API, 6 sekund oczekiwania
+na każdą, cel do 8 sekund dla raportu API i 10 sekund oczekiwania
+monitora na API (odczyt HTTP również 10 sekund). Pozostałe serwisy mają
+6 sekund na całe żądanie i 5 sekund na odczyt. Limit oczekiwania nie
+przerywa już działającego wątku lokalnego; katalog prób jest wymagany
+w całości i bez duplikatów. Pozostałe limity i harmonogram nie zmieniają
+się. Szczegóły w [kontraktach API](lld/kontrakty_api.md).

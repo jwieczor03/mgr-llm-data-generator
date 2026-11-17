@@ -57,24 +57,35 @@ def artifacts_health(request: Request) -> dict:
     return request.app.state.artifacts.report()
 
 
-async def ready_for_app(app: FastAPI) -> dict:
+async def local_check(name, operation, timeout):
+    try:
+        # Cancelling the wait does not stop the worker; artifact cleanup still runs.
+        result = await asyncio.wait_for(asyncio.to_thread(operation), timeout)
+        if name == "database":
+            code = result["issues"][0]["code"] if result["issues"] else "ok"
+        elif result["status"] == "ready":
+            code = "ok"
+        else:
+            code = next((result[n]["code"] for n in ("project", "working") if result[n]["code"]), "diagnostic_failed")
+        return check(name, code)
+    except TimeoutError:
+        return check(name, "timeout")
+    except Exception:
+        return check(name, "diagnostic_failed")
+
+
+async def ready_for_app(app: FastAPI, *, local_timeout=6) -> dict:
     config = app.state.config_report
     settings = app.state.settings
     checks = [check("process"), check("configuration", "ok" if config["status"] == "valid" else "configuration_unavailable")]
-    database, artifacts = await asyncio.gather(
-        run_in_threadpool(app.state.database.report), run_in_threadpool(app.state.artifacts.report))
-    db_code = database["issues"][0]["code"] if database["issues"] else "ok"
-    checks.append(check("database", db_code))
-    if artifacts["status"] == "ready":
-        artifact_code = "ok"
-    else:
-        artifact_code = next((artifacts[n]["code"] for n in ("project", "working") if artifacts[n]["code"]), "diagnostic_failed")
-    checks.append(check("artifacts", artifact_code))
     async with httpx.AsyncClient(timeout=httpx.Timeout(5, connect=2), follow_redirects=False, trust_env=False) as client:
-        children = await asyncio.gather(*(
-            probe(client, getattr(settings, name + "_service_url", None) if settings else None, name + "-service")
-            for name in ("generation", "validation")))
-    for name, child in zip(("generation", "validation"), children):
+        database, artifacts, generation, validation = await asyncio.gather(
+            local_check("database", app.state.database.report, local_timeout),
+            local_check("artifacts", app.state.artifacts.report, local_timeout),
+            *(probe(client, getattr(settings, name + "_service_url", None) if settings else None, name + "-service")
+              for name in ("generation", "validation")))
+    checks.extend((database, artifacts))
+    for name, child in zip(("generation", "validation"), (generation, validation)):
         if child["capacity"] == "capable":
             checks.append(check(name))
         else:

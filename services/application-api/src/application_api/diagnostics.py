@@ -55,7 +55,7 @@ def valid_url(value):
         url = urlsplit(value)
         return (url.scheme in ("http", "https") and bool(url.hostname) and url.username is None
                 and url.password is None and url.path in ("", "/") and not url.query and not url.fragment
-                and not any(ord(c) < 33 or ord(c) == 127 for c in value)
+                and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in value)
                 and (url.port is None or 1 <= url.port <= 65535))
     except (ValueError, TypeError):
         return False
@@ -75,10 +75,18 @@ def clean_report(data, service):
     checks = data.get("checks")
     if not isinstance(checks, list) or not 1 <= len(checks) <= 20:
         raise ValueError
-    allowed_ids = {"process", "configuration", "database", "artifacts", "generation", "validation"}
+    catalogs = {"application-api": {"process", "configuration", "database", "artifacts", "generation", "validation"},
+                "generation-service": {"process", "configuration"},
+                "validation-service": {"process", "configuration"}}
+    allowed_ids = catalogs.get(service, set())
+    ids = [item.get("id") if isinstance(item, dict) else None for item in checks]
+    if len(ids) != len(allowed_ids) or set(ids) != allowed_ids:
+        raise ValueError
     safe = []
     for item in checks:
         if not isinstance(item, dict) or item.get("id") not in allowed_ids or item.get("status") not in ("ok", "failed", "not_checked"):
+            raise ValueError
+        if item["id"] == "process" and (item["status"] != "ok" or item.get("code") != "ok"):
             raise ValueError
         if not isinstance(item.get("code"), str) or len(item["code"]) > 80:
             raise ValueError
@@ -102,12 +110,16 @@ def clean_report(data, service):
     return result
 
 
-async def probe(client, url, service):
+async def probe(client, url, service, *, total_timeout=None):
     if not valid_url(url):
         return report(service, [check("configuration", "configuration_unavailable")])
+    # The outer API needs more time than its own concurrent child probes.
+    timeout = total_timeout if total_timeout is not None else (10 if service == "application-api" else 6)
+    read_timeout = 10 if service == "application-api" else 5
     try:
-        async with asyncio.timeout(6):
-            async with client.stream("GET", url.rstrip("/") + "/health/ready") as response:
+        async with asyncio.timeout(timeout):
+            async with client.stream("GET", url.rstrip("/") + "/health/ready",
+                                     timeout=httpx.Timeout(read_timeout, connect=2)) as response:
                 if response.status_code != 200:
                     return report(service, [check("configuration", "http_error")])
                 body = bytearray()
@@ -118,8 +130,13 @@ async def probe(client, url, service):
                 return clean_report(json.loads(body), service)
     except (TimeoutError, httpx.TimeoutException):
         code = "timeout"
+    except httpx.InvalidURL:
+        code = "configuration_unavailable"
     except httpx.RequestError:
         code = "unreachable"
-    except (ValueError, UnicodeError, TypeError, OverflowError):
+    except (ValueError, UnicodeError, TypeError, OverflowError, RecursionError):
         code = "invalid_report"
+    except Exception:
+        # Isolate unexpected failures without exposing exception contents.
+        code = "diagnostic_failed"
     return report(service, [check("configuration", code)])
