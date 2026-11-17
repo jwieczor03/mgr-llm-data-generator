@@ -5,6 +5,8 @@ from application_api.config import FIELDS, load_config, require_capabilities
 
 
 VALUES = {
+    'ARTIFACT_PROJECT_ROOT': '/tmp/artifact-project',
+    'ARTIFACT_WORKING_ROOT': '/tmp/artifact-working',
     'APP_DB_HOST': 'localhost', 'APP_DB_PORT': '5432', 'APP_DB_NAME': 'app',
     'APP_DB_USER': 'user', 'APP_DB_PASSWORD': 'secret-value',
     'GENERATION_SERVICE_URL': 'http://localhost:8001',
@@ -132,7 +134,7 @@ uvicorn.run('application_api.bootstrap:app', host='127.0.0.1', port=int(sys.argv
     process, report = start()
     try:
         assert report['status'] == 'invalid'
-        assert set(report['blocked_capabilities']) == {'database', 'generation', 'validation'}
+        assert set(report['blocked_capabilities']) == {'database', 'generation', 'validation', 'artifacts'}
     finally:
         process.terminate()
         process.wait(timeout=5)

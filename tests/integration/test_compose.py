@@ -175,3 +175,33 @@ def test_backend_images_do_not_contain_local_env_files(stack: Stack):
             "exec", "-T", service, "python", "-c",
             "from pathlib import Path; assert not list(Path('/app').rglob('.env*'))",
         )
+
+
+def test_artifacts_survive_api_recreation_and_are_api_only(stack: Stack):
+    report = json.loads(stack.get("/health/artifacts")[2])
+    assert report["status"] == "ready"
+    assert stack.run("exec", "-T", "application-api", "id", "-u") == "10001"
+    script = """
+import json, os
+from application_api.artifact_store import LocalArtifactStore
+s = LocalArtifactStore(os.environ['ARTIFACT_PROJECT_ROOT'], os.environ['ARTIFACT_WORKING_ROOT'])
+print(json.dumps([s.put(n, n.encode()).__dict__ for n in ('project', 'working')]))
+"""
+    refs = stack.run("exec", "-T", "application-api", "python", "-c", script)
+    stack.run("up", "-d", "--force-recreate", "--no-deps", "--wait", "application-api")
+    script = """
+import json, os, sys
+from application_api.artifact_store import ArtifactRef, LocalArtifactStore
+s = LocalArtifactStore(os.environ['ARTIFACT_PROJECT_ROOT'], os.environ['ARTIFACT_WORKING_ROOT'])
+for item in json.loads(sys.argv[1]):
+    ref = ArtifactRef(**item)
+    assert s.get(ref) == ref.namespace.encode()
+    assert s.delete(ref)
+"""
+    stack.run("exec", "-T", "application-api", "python", "-c", script, refs)
+    for service in ("generation-service", "validation-service", "app-db"):
+        container = stack.run("ps", "-q", service)
+        inspect = subprocess.run(["docker", "inspect", container], capture_output=True, text=True, check=True)
+        mounts = json.loads(inspect.stdout)[0]["Mounts"]
+        assert all("artifact-project-data" not in m.get("Name", "") and
+                   "artifact-working-data" not in m.get("Name", "") for m in mounts)

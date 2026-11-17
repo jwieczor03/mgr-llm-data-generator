@@ -13,6 +13,12 @@ services:
     env_file:
       - path: ./services/application-api/.env
         required: false
+    environment:
+      ARTIFACT_PROJECT_ROOT: /var/lib/application-api/project
+      ARTIFACT_WORKING_ROOT: /var/lib/application-api/working
+    volumes:
+      - artifact-project-data:/var/lib/application-api/project
+      - artifact-working-data:/var/lib/application-api/working
     ports:
       - "127.0.0.1:8000:8000"
     networks: [services, database]
@@ -66,3 +72,5 @@ networks:
 
 volumes:
   app-db-data:
+  artifact-project-data:
+  artifact-working-data:
