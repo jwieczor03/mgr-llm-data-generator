@@ -795,9 +795,13 @@ nowego widoku; testy bazy pominięte w szybkim przebiegu). Osobna kontrola
 danych: 9 testów bazy i 8 testów Compose przeszło. W osobnym projekcie
 odbiorowym zwykły pierwszy start przed restartem zwrócił `ready` i migrację
 `applied`. Wyścig z bazą nadal jest możliwy; instrukcja opisuje restart.
-Proxy Vite zwróciło `{"status":"ok"}` przez lokalny port. Rzeczywista
-przeglądarka nie została sprawdzona: komputer jest zablokowany i przeglądarka
-niedostępna. Sprawdzenie UI w obu trybach oraz ręczny odbiór pozostają otwarte.
+W przeglądarce sprawdzono połączenie pod wspólnym adresem API i przez
+proxy Vite, ponowienie myszą i klawiaturą, jasny i ciemny motyw oraz
+szerokości 390 i 1280 px bez poziomego przewijania. Po zatrzymaniu API
+otwarta strona Vite pokazała błąd, a niezależny monitor działał i wskazał
+niedostępność API. Po przywróceniu API oba widoki pokazały powrót działania;
+ręczne kontrole monitora nie zmieniły czasu kolejnej kontroli automatycznej.
+To wynik kontroli wykonawcy; ręczny odbiór użytkownika pozostaje osobny.
 
 #### S1-T9 — Przygotować niezależny monitor serwisów i panel diagnostyczny
 

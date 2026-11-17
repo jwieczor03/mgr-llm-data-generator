@@ -207,6 +207,11 @@ frontendu, uv 0.11.1 i PostgreSQL 18.7. Biblioteki są instalowane z blokad.
    Wynik potwierdza tylko proces API, nie konfigurację ani bazę. Odbiór
    połączenia i migracji opisano poniżej.
 
+Kontrolę tych widoków w przeglądarce wykonano w ramach S1-T8: połączenie
+pod wspólnym adresem i przez Vite, oba motywy, klawiaturę oraz widok
+390 i 1280 px. Sprawdzono też błąd po zatrzymaniu API i powrót działania
+w niezależnym panelu. Ręczny odbiór użytkownika pozostaje osobnym krokiem.
+
 Automatyczne testy rzeczywistych kontenerów uruchom osobno:
 
 ```sh
