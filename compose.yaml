@@ -45,6 +45,18 @@ services:
     networks: [services]
     healthcheck: *backend-health
 
+  monitor-service:
+    build:
+      context: .
+      dockerfile: services/monitor-service/Dockerfile
+    env_file:
+      - path: ./services/monitor-service/.env
+        required: false
+    ports:
+      - "127.0.0.1:8080:8000"
+    networks: [services]
+    healthcheck: *backend-health
+
   app-db:
     build:
       context: .

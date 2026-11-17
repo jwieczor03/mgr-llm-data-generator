@@ -2,8 +2,9 @@ FROM node:26.13.1-bookworm-slim AS frontend
 WORKDIR /web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
-COPY apps/web/index.html apps/web/tsconfig.json apps/web/vite.config.ts ./
+COPY apps/web/index.html apps/web/monitor.html apps/web/tsconfig.json apps/web/vite.config.ts ./
 COPY apps/web/src ./src
+COPY docs/ui/shared/tokens.css /docs/ui/shared/tokens.css
 RUN npm run build
 
 FROM python:3.14.10-slim-bookworm

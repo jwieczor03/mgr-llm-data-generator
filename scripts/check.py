@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ("application-api", "generation-service", "validation-service")
+SERVICES = ("application-api", "generation-service", "validation-service", "monitor-service")
 
 
 def run(command, cwd=ROOT, env=None):
