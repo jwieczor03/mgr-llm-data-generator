@@ -144,7 +144,7 @@ konfiguracja narzędzi powstanie tylko raz. Kroki nie są osobnymi issues.
 | S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Zaimplementowano lokalny adapter i diagnostykę zgodnie z decyzją architekta w procesie #20; review i odbiór ręczny pozostają osobnymi etapami. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. |
 | S1-T6 | Przygotować lokalny kontekst właściciela i granicę kontroli dostępu | Zaimplementowano wymienne źródło kontekstu i politykę własności bez logowania, zgodnie z decyzją architekta w procesie #21; review i odbiór pozostają osobnymi etapami. Podłączenie rzeczywistych zasobów należy do ich story. Bez kont, tokenów logowania i obsługi wielu użytkowników. |
 | S1-T7 | Skonfigurować wspólne narzędzia kontroli jakości i testów | Zaimplementowano powtarzalne kontrole i testy zgodnie z decyzją architekta dla #22; review i odbiór ręczny pozostają osobnymi etapami. |
-| S1-T8 | Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska | Sprawdzony start, minimalne połączenie frontendu z API i instrukcja uruchomienia, zatrzymania oraz diagnostyki. Bez czatu i przepływu generowania. Zatwierdzono podawanie gotowego frontendu przez `application-api`, z osobnym Vite wyłącznie do developmentu. Minimalny kontrakt sprawdzenia połączenia oraz szczegóły konfiguracji wymagają uzgodnienia. |
+| S1-T8 | Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska | Sprawdzony start, minimalne połączenie frontendu z API i instrukcja uruchomienia, zatrzymania oraz diagnostyki. Bez czatu i przepływu generowania. Zatwierdzono podawanie gotowego frontendu przez `application-api`, z osobnym Vite wyłącznie do developmentu. Kontrakt kontroli i szczegóły uruchomienia opisano w zadaniu oraz rejestrze decyzji. |
 | S1-T9 | Przygotować niezależny monitor serwisów i panel diagnostyczny | Osobny proces monitora i panel w przeglądarce, niezależne od działania `application-api`. Kontrole przy uruchomieniu i co 30 minut oraz bezpłatna, niedestrukcyjna akcja „Sprawdź teraz”, bez wpływu na harmonogram. Raporty pokazują uzgodnione stany, przyczyny i ograniczenia bez sekretów. Zakres zaakceptowany; kontrakty, technologia, zabezpieczenia i obsługa jednoczesnych kontroli wymagają doprecyzowania. |
 
 **Proponowana kolejność:** S1-T1 → S1-T7 → S1-T2, następnie
@@ -747,15 +747,15 @@ Nie dodajemy CI, dodatkowych formaterów ani testów przeglądarkowych.
 
 #### S1-T8 — Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska
 
-**Status:** szkic odbioru środowiska; blokady integracji pozostają jawne.
+**Status:** implementacja w toku, [issue #23](https://github.com/jwieczor03/mgr-llm-data-generator/issues/23). Niezależne review i ręczny odbiór użytkownika pozostają osobnymi krokami.
 
 **Cel:** użytkownik uruchamia fundament lokalnie według sprawdzonej
 instrukcji i potrafi znaleźć przyczynę ograniczonej gotowości.
 
 **Źródło i punkt startowy:** REQ-002, REQ-067, AC-29 i sekcja 13.5
 [specyfikacji](specyfikacja_mvp.md). Istniejący `README.md`
-jest punktem wejścia; dziś nie zawiera instrukcji działającej aplikacji.
-Instrukcję uzupełnić na podstawie rzeczywiście dostarczonego środowiska.
+jest punktem wejścia i opisuje uruchomienie dostarczonego fundamentu.
+Instrukcja nie przedstawia fundamentu jako gotowej aplikacji biznesowej.
 
 **Zależności:** dostarczone i sprawdzone zakresy T1–T7 oraz T9;
 przed integracją rozstrzygnięcie podawania frontendu i sposobu
@@ -785,10 +785,23 @@ otworzyć także po zatrzymaniu `application-api`. Brak wymaganej
 konfiguracji jest widoczny jako problem, nie jako pełna gotowość.
 Instrukcja nie zawiera sekretów ani niezweryfikowanych poleceń.
 
-**Do wyjaśnienia:** ścieżka i sposób podawania zbudowanego frontendu,
-minimalne sprawdzenie połączenia w interfejsie oraz wynikające z T3/T9
-adresy, konfiguracja i start monitora. Nie tworzyć nowego endpointu
-ani wyglądu komunikatu bez decyzji użytkownika.
+**Ustalone:** szczegóły kontroli procesu i tekstów ekranu zapisano w
+[rejestrze decyzji](ustalenia_architektoniczne.md#s1-t8--połączenie-ekranu-technicznego-z-api-17-listopada-2026)
+oraz [systemie UI](ui/design-system.md#ekran-techniczny-s1-t8--decyzje-designera-17-listopada-2026).
+
+**Wykonane sprawdzenia:** `scripts/check.py` przeszedł (w tym 7 testów
+nowego widoku; testy bazy pominięte w szybkim przebiegu). Osobna kontrola
+`integration` uruchomiła rzeczywisty PostgreSQL i Compose na izolowanych
+danych: 9 testów bazy i 8 testów Compose przeszło. W osobnym projekcie
+odbiorowym zwykły pierwszy start przed restartem zwrócił `ready` i migrację
+`applied`. Wyścig z bazą nadal jest możliwy; instrukcja opisuje restart.
+W przeglądarce sprawdzono połączenie pod wspólnym adresem API i przez
+proxy Vite, ponowienie myszą i klawiaturą, jasny i ciemny motyw oraz
+szerokości 390 i 1280 px bez poziomego przewijania. Po zatrzymaniu API
+otwarta strona Vite pokazała błąd, a niezależny monitor działał i wskazał
+niedostępność API. Po przywróceniu API oba widoki pokazały powrót działania;
+ręczne kontrole monitora nie zmieniły czasu kolejnej kontroli automatycznej.
+To wynik kontroli wykonawcy; ręczny odbiór użytkownika pozostaje osobny.
 
 #### S1-T9 — Przygotować niezależny monitor serwisów i panel diagnostyczny
 

@@ -68,7 +68,7 @@ szkielety aplikacji, konfigurację, lokalny start, bazę i migracje,
 magazyn plików, dostęp, narzędzia testów, sprawdzenie całości
 oraz niezależny monitor z panelem diagnostycznym.
 T1–T3 dostarczają szkielety, konfigurację i lokalne uruchomienie.
-Status poszczególnych zadań opisano w planie. S1-T9 jest w realizacji.
+Status poszczególnych zadań opisano w planie. S1-T8 jest w realizacji.
 
 ### Zadania S3 do późniejszego przeniesienia na GitHub
 
@@ -110,12 +110,12 @@ promptowania w głównym zakresie.
 
 Lista nierozstrzygniętych szczegółów znajduje się w sekcji 16 specyfikacji. Nie należy zastępować tych decyzji założeniami zaczerpniętymi z archiwum.
 
-## Lokalne uruchomienie przez Docker Compose — S1-T3
+## Lokalne uruchomienie przez Docker Compose
 
 Ten zakres uruchamia trzy backendy i PostgreSQL aplikacji. Gotowy frontend
 udostępnia `application-api` pod `http://127.0.0.1:8000`, bez serwera Vite.
-To nadal fundament aplikacji: S1-T4 dodaje połączenie `application-api`
-z bazą i migracje; S1-T9 dodaje monitor z panelem na porcie 8080.
+To fundament aplikacji, bez generowania danych. Niezależny panel
+diagnostyczny monitora jest dostępny pod `http://127.0.0.1:8080`.
 
 Potrzebny jest działający Docker z Compose co najmniej 2.24.4. Nie trzeba
 instalować Pythona ani Node.js na hoście. Z katalogu głównego repozytorium
@@ -160,6 +160,7 @@ docker compose up -d --build --wait
 docker compose ps
 curl --fail http://127.0.0.1:8000/health/live
 curl --fail http://127.0.0.1:8000/health/config
+curl --fail http://127.0.0.1:8000/health/database
 ```
 
 Otwórz `http://127.0.0.1:8000`. Oczekiwanie `--wait` sprawdza działanie
@@ -180,6 +181,7 @@ Zwykłe zatrzymanie, ponowny start i usunięcie kontenerów bez kasowania danych
 ```sh
 docker compose stop
 docker compose up -d --wait
+docker compose restart application-api
 docker compose down
 ```
 
@@ -189,7 +191,7 @@ Pliki `.env`, zależności hosta i dane nie trafiają do kontekstu budowania.
 Obrazy korzystają z Python 3.14.10, Node.js 26.13.1 tylko podczas budowania
 frontendu, uv 0.11.1 i PostgreSQL 18.7. Biblioteki są instalowane z blokad.
 
-### Sprawdzenie i ręczny odbiór S1-T3
+### Sprawdzenie i ręczny odbiór środowiska
 
 1. Uruchom środowisko powyższymi poleceniami i otwórz stronę startową.
 2. Sprawdź `/health/live`, `/health/config` i `/api/v1/nieznany`.
@@ -199,8 +201,16 @@ frontendu, uv 0.11.1 i PostgreSQL 18.7. Biblioteki są instalowane z blokad.
    diagnostyczne powinny nadal odpowiadać. Raport konfiguracji nie służy
    do wykrywania tej awarii. Przywróć bazę przez `docker compose up -d app-db`.
 4. Zmień parametr backendu, odtwórz jego kontener i sprawdź nowy raport.
-5. Zatrzymaj i uruchom środowisko ponownie. Port 8080 pozostaje niedostępny
-   do czasu dostarczenia T9. Odbiór połączenia i migracji opisano poniżej.
+5. Zatrzymaj i uruchom środowisko ponownie. Otwórz panel na porcie 8080,
+   a następnie zatrzymaj API i potwierdź, że panel nadal działa.
+6. Na stronie głównej sprawdź komunikat połączenia i ponów kontrolę.
+   Wynik potwierdza tylko proces API, nie konfigurację ani bazę. Odbiór
+   połączenia i migracji opisano poniżej.
+
+Kontrolę tych widoków w przeglądarce wykonano w ramach S1-T8: połączenie
+pod wspólnym adresem i przez Vite, oba motywy, klawiaturę oraz widok
+390 i 1280 px. Sprawdzono też błąd po zatrzymaniu API i powrót działania
+w niezależnym panelu. Ręczny odbiór użytkownika pozostaje osobnym krokiem.
 
 Automatyczne testy rzeczywistych kontenerów uruchom osobno:
 

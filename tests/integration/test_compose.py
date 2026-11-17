@@ -80,6 +80,12 @@ def stack(tmp_path_factory):
     environment = Stack(directory)
     try:
         environment.run("up", "--build", "-d", "--wait", "--wait-timeout", "90")
+        # Inspect the ordinary first start before recovering a possible database startup race.
+        assert environment.get("/")[0] == 200
+        assert json.loads(environment.get("/health/live")[2]) == {"status": "ok"}
+        assert json.loads(environment.get("/health/config")[2])["status"] == "valid"
+        environment.initial_database = json.loads(environment.get("/health/database")[2])
+        assert environment.initial_database["status"] in {"ready", "unavailable"}
         # First API start may race PostgreSQL initialization; restart after database readiness.
         environment.run("up", "-d", "--force-recreate", "--no-deps", "--wait", "application-api")
         yield environment
@@ -133,8 +139,14 @@ def test_database_volume_survives_container_recreation(stack: Stack):
         # An unavailable database must not disable the HTTP diagnostics or frontend.
         assert stack.get("/health/live")[0] == 200
         assert stack.get("/")[0] == 200
+        assert json.loads(stack.get("/health/database")[2])["status"] == "unavailable"
         stack.run("up", "-d", "--wait", "--wait-timeout", "90", "app-db")
         assert stack.sql("SELECT value FROM compose_probe;") == "37"
+        stack.run("stop")
+        stack.run("up", "-d", "--wait", "--wait-timeout", "90")
+        assert stack.sql("SELECT value FROM compose_probe;") == "37"
+        assert json.loads(stack.get("/health/live")[2]) == {"status": "ok"}
+        assert stack.get("/")[0] == 200
     finally:
         stack.sql("DROP TABLE IF EXISTS compose_probe;")
 
@@ -152,6 +164,8 @@ def test_missing_backend_env_keeps_diagnostics_available(stack: Stack):
             "GENERATION_SERVICE_URL", "VALIDATION_SERVICE_URL",
         }
         assert stack.get("/")[0] == 200
+        assert json.loads(stack.get("/health/live")[2]) == {"status": "ok"}
+        assert json.loads(stack.get("/health/database")[2])["status"] == "unavailable"
     finally:
         env_file.write_text(contents)
         stack.run("up", "-d", "--force-recreate", "--no-deps", "--wait", "application-api")
@@ -201,7 +215,7 @@ for item in json.loads(sys.argv[1]):
     stack.run("exec", "-T", "application-api", "python", "-c", script, refs)
     for service in ("generation-service", "validation-service", "app-db"):
         container = stack.run("ps", "-q", service)
-        inspect = subprocess.run(["docker", "inspect", container], capture_output=True, text=True, check=True)
+        inspect = subprocess.run(["docker", "inspect", container], capture_output=True, text=True, check=True, env=stack.environment)
         mounts = json.loads(inspect.stdout)[0]["Mounts"]
         assert all("artifact-project-data" not in m.get("Name", "") and
                    "artifact-working-data" not in m.get("Name", "") for m in mounts)
