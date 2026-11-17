@@ -203,3 +203,32 @@ wynika z preferencji systemu; zmiana dotyczy tylko bieżącej strony.
 Runtime korzysta bezpośrednio z `shared/tokens.css`: tło `--sidebar`,
 powierzchnia `--canvas`, karty `--surface-container`, kolory stanów
 i fokus z istniejących tokenów.
+
+### Ekran techniczny S1-T8 — decyzje designera, 17 listopada 2026
+
+Decyzje designera w delegowanym procesie realizacji; nie oznaczają ręcznego
+odbioru użytkownika. Zachowujemy nagłówek „Generator danych” i informację
+„Szkielet aplikacji”. Pod nimi jedna karta „Połączenie z API” przedstawia
+tekstowy status: „Sprawdzanie połączenia…”, „Połączenie z API działa” albo
+„Nie udało się potwierdzić połączenia z API”. Brak potwierdzenia pozwala
+ponowić kontrolę przyciskiem „Sprawdź połączenie”; podczas kontroli przycisk
+jest wyłączony. Zmiana statusu jest ogłaszana przez `role="status"`.
+
+Stała informacja wyjaśnia: „Połączenie potwierdza działanie procesu API.
+Gotowość konfiguracji, bazy i pozostałych usług sprawdzisz w osobnym panelu
+diagnostycznym. Generowanie danych nie jest jeszcze dostępne.” Nie pokazujemy
+zbiorczej zielonej etykiety „aplikacja gotowa” ani szczegółów technicznych
+odpowiedzi. Adres panelu i instrukcja diagnostyki pozostają w README.
+
+Używamy istniejących tokenów i wyglądu kart oraz przycisków panelu T9:
+`--sidebar`, `--canvas`, `--surface-container`, `--text`, `--accent`,
+`--success`, `--error` i `--focus`. Bez nowej palety i zmiany wspólnych
+wartości. Jedna kolumna do szerokości `--content-width`, zawijanie treści
+i akcji, mobilne odstępy jak w panelu. Motyw początkowy odpowiada preferencji
+systemowej; przycisk przełącza go tylko na bieżącej stronie, analogicznie
+do T9. W obu motywach wymagane są teksty stanów i widoczny fokus.
+
+To małe rozszerzenie ekranu technicznego, bez nowej makiety produktu.
+Implementację należy obejrzeć w rzeczywistej przeglądarce, w obu motywach,
+z klawiaturą i przy szerokościach 390 oraz 1280 px; sprawdzić również
+błąd i brak poziomego przewijania. Zapis decyzji nie potwierdza tych kontroli.

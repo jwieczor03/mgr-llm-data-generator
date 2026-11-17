@@ -883,3 +883,32 @@ monitora na API (odczyt HTTP również 10 sekund). Pozostałe serwisy mają
 przerywa już działającego wątku lokalnego; katalog prób jest wymagany
 w całości i bez duplikatów. Pozostałe limity i harmonogram nie zmieniają
 się. Szczegóły w [kontraktach API](lld/kontrakty_api.md).
+
+### S1-T8 — połączenie ekranu technicznego z API (17 listopada 2026)
+
+**Ustalone przez architekta w delegowanym procesie realizacji:** ekran
+techniczny sprawdza istniejące `GET /health/live` pod adresem względnym.
+Poprawny wynik to HTTP 200 i obiekt JSON z `status: "ok"`. Nie dodajemy
+endpointu ani drugiego mechanizmu oceny gotowości. Ten sam kod działa
+przez wspólny adres FastAPI i przez proxy Vite. Żądanie ma limit 5 sekund,
+nie korzysta z pamięci podręcznej i jest przerywane przy opuszczeniu ekranu.
+
+Jedna kontrola odbywa się po otwarciu ekranu. Użytkownik może ją powtórzyć
+przyciskiem; brak automatycznego odpytywania i ponawiania błędów. Kontrole
+nie nakładają się, a spóźniona odpowiedź nie zastępuje nowszego stanu.
+Błąd sieci, limit czasu, status HTTP inny niż 200 i nieprawidłowy JSON
+oznaczają brak potwierdzenia połączenia; nie pokazujemy surowej odpowiedzi
+ani treści wyjątku. Próba nie wywołuje LLM i nie sprawdza bazy ani plików.
+
+**Dlaczego:** kontrakt procesu istnieje od T1 i pozwala sprawdzić rzeczywistą
+ścieżkę przeglądarka–API. Odczyt `/health/ready` powielałby aktywne próby
+zasobów z T9 bez potrzeby w tym ekranie. Potwierdzenie procesu pozostaje
+oddzielone od gotowości fundamentu: brak konfiguracji i awarię bazy należy
+sprawdzać istniejącą diagnostyką i niezależnym panelem T9. Ekran zawsze
+wyjaśnia tę granicę, także po sukcesie. Nie potwierdza gotowości generatora.
+
+Weryfikacja implementacji ma objąć sukces, oczekiwanie, błąd, limit czasu,
+ponowienie oraz oba sposoby podawania frontendu. Osobno trzeba odtworzyć
+ograniczoną gotowość przy brakującej konfiguracji i awarii bazy, zachowanie
+danych po ponownym starcie oraz dostępność panelu przy zatrzymanym API.
+To decyzja techniczna do wykonania, nie wynik testów ani ręczna akceptacja.
