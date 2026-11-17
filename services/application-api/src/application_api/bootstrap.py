@@ -7,11 +7,15 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from application_api.access import AccessPolicy, OwnershipAccessPolicy
-from application_api.identity import (ActorContext, ActorContextProvider, ActorContextUnavailable,
-                                      LocalActorContextProvider)
 from application_api.artifact_store import LocalArtifactStore, UnconfiguredArtifactStore
 from application_api.config import load_config
 from application_api.database import Database
+from application_api.identity import (
+    ActorContext,
+    ActorContextProvider,
+    ActorContextUnavailable,
+    LocalActorContextProvider,
+)
 
 
 @asynccontextmanager

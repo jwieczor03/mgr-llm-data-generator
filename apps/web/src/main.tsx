@@ -1,5 +1,4 @@
 import { createRoot } from 'react-dom/client';
+import { App } from './App';
 
-createRoot(document.getElementById('root')!).render(
-  <main><h1>Generator danych</h1><p>Szkielet aplikacji</p></main>,
-);
+createRoot(document.getElementById('root')!).render(<App />);

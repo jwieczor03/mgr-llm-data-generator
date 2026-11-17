@@ -143,7 +143,7 @@ konfiguracja narzędzi powstanie tylko raz. Kroki nie są osobnymi issues.
 | S1-T4 | Podłączyć bazę aplikacji i przygotować mechanizm migracji | Techniczna podstawa połączenia i kontrolowanej aktualizacji struktury PostgreSQL aplikacji w `application-api`, przez zatwierdzone SQLAlchemy i Psycopg oraz migracje Alembic, uruchamiane automatycznie wyłącznie w fazie startu tego serwisu. Błąd migracji pozostawia tryb diagnostyczny z przyczyną i blokadą funkcji wymagających bazy; ponowienie wymaga restartu. Bez tabel projektów, schematów i wykonań z dalszych story; bez nadawania generatorowi i walidatorowi dostępu do tej bazy. Migracje nie należą do health checków. Dokładne wersje i zgodność wymagają sprawdzenia; ochrona przed równoczesnym wykonaniem, tryb połączeń i transakcji pozostają do uzgodnienia. |
 | S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Zaimplementowano lokalny adapter i diagnostykę zgodnie z decyzją architekta w procesie #20; review i odbiór ręczny pozostają osobnymi etapami. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. |
 | S1-T6 | Przygotować lokalny kontekst właściciela i granicę kontroli dostępu | Zaimplementowano wymienne źródło kontekstu i politykę własności bez logowania, zgodnie z decyzją architekta w procesie #21; review i odbiór pozostają osobnymi etapami. Podłączenie rzeczywistych zasobów należy do ich story. Bez kont, tokenów logowania i obsługi wielu użytkowników. |
-| S1-T7 | Skonfigurować wspólne narzędzia kontroli jakości i testów | Powtarzalne sprawdzanie kodu i uruchamianie testów frontendowych, backendowych oraz infrastruktura testów integracyjnych. Bez przenoszenia testów konkretnych funkcji do osobnego końcowego etapu. pytest dla backendów zatwierdzony; pozostałe narzędzia i szczegóły konfiguracji wymagają uzgodnienia. |
+| S1-T7 | Skonfigurować wspólne narzędzia kontroli jakości i testów | Zaimplementowano powtarzalne kontrole i testy zgodnie z decyzją architekta dla #22; review i odbiór ręczny pozostają osobnymi etapami. |
 | S1-T8 | Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska | Sprawdzony start, minimalne połączenie frontendu z API i instrukcja uruchomienia, zatrzymania oraz diagnostyki. Bez czatu i przepływu generowania. Zatwierdzono podawanie gotowego frontendu przez `application-api`, z osobnym Vite wyłącznie do developmentu. Minimalny kontrakt sprawdzenia połączenia oraz szczegóły konfiguracji wymagają uzgodnienia. |
 | S1-T9 | Przygotować niezależny monitor serwisów i panel diagnostyczny | Osobny proces monitora i panel w przeglądarce, niezależne od działania `application-api`. Kontrole przy uruchomieniu i co 30 minut oraz bezpłatna, niedestrukcyjna akcja „Sprawdź teraz”, bez wpływu na harmonogram. Raporty pokazują uzgodnione stany, przyczyny i ograniczenia bez sekretów. Zakres zaakceptowany; kontrakty, technologia, zabezpieczenia i obsługa jednoczesnych kontroli wymagają doprecyzowania. |
 
@@ -185,7 +185,7 @@ przekazanie pełnego zakresu do implementacji.
 | [S1-T4 — Baza i migracje](#s1-t4--podłączyć-bazę-aplikacji-i-przygotować-mechanizm-migracji) | T1, T2; kontrakt diagnostyki i środowisko PostgreSQL do testów | Ochrona równoczesnych migracji, połączenia, transakcje, uprawnienia i testy mechanizmu. |
 | [S1-T5 — Granica magazynu plików](#s1-t5--przygotować-granicę-magazynu-plików-i-lokalny-adapter) | T1, T2 | Adapter, konfigurację i diagnostykę zaimplementowano; review i odbiór ręczny pozostają do wykonania. |
 | [S1-T6 — Kontekst właściciela i dostęp](#s1-t6--przygotować-lokalny-kontekst-właściciela-i-granicę-kontroli-dostępu) | T1 | Kontrakt i adapter zaimplementowano; review i odbiór ręczny pozostają do wykonania. |
-| [S1-T7 — Narzędzia jakości i testów](#s1-t7--skonfigurować-wspólne-narzędzia-kontroli-jakości-i-testów) | T1 | Narzędzia poza pytest, reguły i środowisko testów integracyjnych. |
+| [S1-T7 — Narzędzia jakości i testów](#s1-t7--skonfigurować-wspólne-narzędzia-kontroli-jakości-i-testów) | T1 | Implementacja przygotowana; review i odbiór pozostają osobne. |
 | [S1-T8 — Sprawdzenie całości i instrukcja](#s1-t8--sprawdzić-uruchomienie-całości-w-przeglądarce-i-opisać-obsługę-środowiska) | Dostarczone zakresy T1–T7 oraz T9 | Domknięcie zależności i minimalny kontrakt sprawdzenia połączenia frontend–API. |
 | [S1-T9 — Monitor i panel diagnostyczny](#s1-t9--przygotować-niezależny-monitor-serwisów-i-panel-diagnostyczny) | T1, T2; kontrakt diagnostyki i integracja startu z T3 | Technologia, kontrakty, konkretne próby, zabezpieczenia, limity czasu, świeżość i jednoczesne kontrole. |
 
@@ -732,38 +732,18 @@ odbiór nie są potwierdzone samą implementacją.
 
 #### S1-T7 — Skonfigurować wspólne narzędzia kontroli jakości i testów
 
-**Status:** szkic; pytest zatwierdzony, pozostałe wybory otwarte.
+**Status:** implementacja w zadaniu [#22](https://github.com/jwieczor03/mgr-llm-data-generator/issues/22); niezależne review i ręczny odbiór są osobnymi etapami.
 
-**Cel:** deweloper może powtarzalnie sprawdzać własne zmiany,
-zamiast odkładać testy wszystkich funkcji na koniec projektu.
+**Cel i zakres:** powtarzalna kontrola trzech niezależnych projektów uv,
+frontendu i istniejących testów integracyjnych. Szczegóły decyzji technicznych
+znajdują się w [rejestrze](ustalenia_architektoniczne.md), a komendy w
+[README](../README.md#kontrola-jakości-i-testy-s1-t7).
 
-**Źródło i punkt startowy:** uzgodniony zakres S1 i decyzja pytest
-w [rejestrze](ustalenia_architektoniczne.md). Bazą będą projekty
-i trzy testy `tests/test_health.py` z T1; wspólna konfiguracja
-narzędzi jakości jeszcze nie istnieje.
-
-**Zależności:** T1; uzgodnienie pozostałych narzędzi i sposobu
-przygotowania infrastruktury testów.
-
-**Uzgodnione kroki:**
-1. Uporządkować powtarzalne uruchamianie pytest osobno w każdym backendzie,
-   zachowując niezależne projekty uv.
-2. Po akceptacji narzędzi przygotować sprawdzanie frontendu i kodu
-   backendów oraz podstawę testów integracyjnych.
-3. Opisać rzeczywiste komendy, potrzebne zależności i interpretację
-   wyniku. Nie dublować testów funkcji realizowanych w innych zadaniach.
-
-**Poza zakresem:** samodzielny wybór Ruff, mypy, Playwright, bibliotek
-testowania frontendu i wtyczek pytest; wszystkie pozostają propozycjami.
-Nie zakładać konfiguracji CI bez odrębnego uzgodnienia.
-
-**Kryteria i planowane sprawdzenia:** testy szkieletów można odtworzyć
-zgodnie z instrukcją w każdym backendzie. Kontrolowana błędna asercja
-powoduje niepowodzenie testu; po przywróceniu poprawności test przechodzi.
-Analogiczne sprawdzenia pozostałych narzędzi dopisać po ich akceptacji.
-
-**Do wyjaśnienia:** zestaw pozostałych narzędzi, ich wersje i reguły,
-komendy zbiorcze, środowisko testów integracyjnych oraz ich izolacja.
+**Plan realizacji:** przypiąć narzędzia i skonfigurować kolekcję pytest;
+wyizolować konfigurację i dane testowe; przygotować osobne komendy kontroli
+szybkiej i integracyjnej; sprawdzić sukces oraz kontrolowane błędy testów,
+Ruff i TypeScript. Testy konkretnych funkcji pozostają w ich zadaniach.
+Nie dodajemy CI, dodatkowych formaterów ani testów przeglądarkowych.
 
 #### S1-T8 — Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska
 

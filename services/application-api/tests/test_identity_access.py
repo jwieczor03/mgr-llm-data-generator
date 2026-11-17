@@ -2,14 +2,19 @@ from dataclasses import FrozenInstanceError
 from typing import Annotated
 
 import pytest
+from application_api.access import AccessDenied, AccessPolicy, OwnershipAccessPolicy
+from application_api.bootstrap import (
+    create_app,
+    get_access_policy,
+    require_actor_context,
+)
+from application_api.identity import (
+    ActorContext,
+    ActorContextUnavailable,
+    LocalActorContextProvider,
+)
 from fastapi import Depends, HTTPException
 from fastapi.testclient import TestClient
-
-from application_api.access import AccessDenied, AccessPolicy, OwnershipAccessPolicy
-from application_api.bootstrap import create_app, get_access_policy, require_actor_context
-from application_api.identity import (
-    ActorContext, ActorContextUnavailable, LocalActorContextProvider,
-)
 
 
 @pytest.mark.parametrize("value", [None, 42, "", " \t\n"])

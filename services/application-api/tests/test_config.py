@@ -1,8 +1,6 @@
+from application_api.config import FIELDS, load_config, require_capabilities
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
-
-from application_api.config import FIELDS, load_config, require_capabilities
-
 
 VALUES = {
     'ARTIFACT_PROJECT_ROOT': '/tmp/artifact-project',
@@ -72,6 +70,7 @@ def test_report_http_and_restart(monkeypatch, tmp_path):
     import subprocess
     import sys
     import time
+
     import httpx
 
     service_dir = tmp_path / 'service'

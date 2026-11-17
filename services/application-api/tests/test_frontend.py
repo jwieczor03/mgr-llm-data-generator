@@ -1,11 +1,10 @@
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from application_api import bootstrap, database
 from application_api.bootstrap import create_app
 from application_api.config import FIELDS, load_config
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)

@@ -206,7 +206,7 @@ frontendu, uv 0.11.1 i PostgreSQL 18.7. Biblioteki są instalowane z blokad.
 Automatyczne testy rzeczywistych kontenerów uruchom osobno:
 
 ```sh
-RUN_COMPOSE_TESTS=1 uv run --project services/application-api pytest tests/integration/test_compose.py -v
+RUN_COMPOSE_TESTS=1 uv run --locked --project services/application-api pytest -c services/application-api/pyproject.toml tests/integration/test_compose.py -v
 ```
 
 Testy budują obrazy, używają własnej konfiguracji i losowo nazwanego projektu,
@@ -270,16 +270,42 @@ wymuszające błąd lub tworzące tabelę istnieją tylko w kopii testowej.
 
 Repozytorium zawiera początkowe szkielety trzech serwisów i frontendu. Nie są one jeszcze gotową aplikacją. Do uruchomienia potrzebne są Python 3.14, uv oraz Node.js 26 i npm. Sprawdzono Python 3.14.6, uv 0.11.1, Node.js 26.13.0 i npm 11.20.0. Wersje bibliotek znajdują się w deklaracjach i plikach blokad poszczególnych projektów.
 
-Z katalogu głównego repozytorium zainstaluj zależności i wykonaj testy każdego backendu:
+Z katalogu głównego zainstaluj przypięte zależności:
 
 ```sh
-uv sync --project services/application-api --python 3.14
-uv sync --project services/generation-service --python 3.14
-uv sync --project services/validation-service --python 3.14
-uv run --project services/application-api pytest services/application-api/tests
-uv run --project services/generation-service pytest services/generation-service/tests
-uv run --project services/validation-service pytest services/validation-service/tests
+uv sync --locked --project services/application-api --python 3.14
+uv sync --locked --project services/generation-service --python 3.14
+uv sync --locked --project services/validation-service --python 3.14
+npm ci --prefix apps/web
 ```
+
+### Kontrola jakości i testy S1-T7
+
+Z katalogu głównego uruchom szybką kontrolę:
+
+```sh
+python3 scripts/check.py
+```
+
+Skrypt sprawdza Ruff (reguły E4, E7, E9, F, I), testy pytest każdego
+backendu osobno, typy TypeScript, test Vitest oraz build frontendu.
+Zatrzymuje się na pierwszym błędzie i zwraca niezerowy kod. Wymaga
+wcześniejszej instalacji; nie pobiera zależności. `skipped` dla testów
+bazy oznacza, że nie zostały wykonane. Test UI używa jsdom, czyli
+symulowanego środowiska DOM, i nie zastępuje testu w przeglądarce.
+Testy używają tymczasowych danych i nie odczytują lokalnych plików `.env`
+serwisów. Istniejący test konfiguracji uruchamia lokalny port loopback.
+
+Osobno, po uruchomieniu Docker Desktop lub demona Dockera, wykonaj:
+
+```sh
+python3 scripts/check.py integration
+```
+
+To uruchamia rzeczywiste testy PostgreSQL oraz Compose. Tworzą osobne
+kontenery, bazę i wolumeny testowe, a po zakończeniu usuwają własne zasoby.
+Wymagają dostępu do obrazów i mogą potrwać kilka minut. Brak Dockera jest
+błędem, a nie zaliczonym testem. Nie uruchamiaj ich na danych użytkownika.
 
 Uruchom każdy serwis w osobnym terminalu:
 
@@ -358,7 +384,7 @@ Testy adaptera i API oraz izolowanego Compose uruchom poleceniami:
 
 ```sh
 uv run --locked --project services/application-api pytest services/application-api/tests -q
-RUN_COMPOSE_TESTS=1 uv run --locked --project services/application-api pytest tests/integration/test_compose.py -q
+RUN_COMPOSE_TESTS=1 uv run --locked --project services/application-api pytest -c services/application-api/pyproject.toml tests/integration/test_compose.py -q
 ```
 
 Test Compose tworzy i usuwa własny projekt i wolumeny.
