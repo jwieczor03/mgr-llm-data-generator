@@ -41,7 +41,7 @@ def postgres():
         docker("exec", name, "psql", "-U", "postgres", "-d", "testdb", "-v", "ON_ERROR_STOP=1", "-c", sql)
         yield name, port
     finally:
-        docker("rm", "-f", name)
+        docker("rm", "-fv", name)
 
 
 @pytest.fixture
@@ -175,7 +175,7 @@ def test_provisioning(postgres):
         assert "app_user|f|f|f" in result.stdout
         assert result.stdout.splitlines()[-1] == "app_user"
     finally:
-        docker("rm", "-f", name)
+        docker("rm", "-fv", name)
         docker("image", "rm", image)
 
 
