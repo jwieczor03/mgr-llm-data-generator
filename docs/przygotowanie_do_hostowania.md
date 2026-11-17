@@ -36,6 +36,8 @@ Osobno rozpatrujemy:
 
 ## 3. Kontekst tożsamości bez wdrażania logowania
 
+S1-T6 dostarcza fundament kontekstu i polityki własności opisany w [rejestrze decyzji](ustalenia_architektoniczne.md#kontekst-właściciela-i-polityka-dostępu--s1-t6). Podłączenie rzeczywistych zasobów i zabezpieczenie hostingu pozostają do wykonania.
+
 Proponowany przepływ:
 
 ```text

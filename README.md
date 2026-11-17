@@ -362,3 +362,20 @@ RUN_COMPOSE_TESTS=1 uv run --locked --project services/application-api pytest te
 ```
 
 Test Compose tworzy i usuwa własny projekt i wolumeny.
+
+### Kontekst właściciela — S1-T6
+
+API składa lokalny kontekst `local-owner` i wymienną politykę własności.
+Nie ma nowej trasy ani konfiguracji. Ten fundament nie uwierzytelnia
+użytkownika, nie chroni jeszcze rzeczywistych zasobów i nie zabezpiecza
+hostingu; szczegóły zawiera [rejestr decyzji](docs/ustalenia_architektoniczne.md#kontekst-właściciela-i-polityka-dostępu--s1-t6).
+
+Do sprawdzenia granicy i ręcznego odbioru uruchom z katalogu repozytorium:
+
+```sh
+uv run --locked --project services/application-api pytest services/application-api/tests/test_identity_access.py -q
+```
+
+Testy pokazują zgodność właściciela, odmowę, podmianę źródła i polityki oraz
+bezpieczny błąd braku kontekstu na trasie istniejącej tylko w testach.
+Pełny odbiór izolacji zasobów należy do ich przyszłych story.

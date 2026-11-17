@@ -142,7 +142,7 @@ konfiguracja narzędzi powstanie tylko raz. Kroki nie są osobnymi issues.
 | S1-T3 | Przygotować lokalne uruchomienie backendów i baz w Docker Compose | Dostarczono obrazy trzech backendów, frontend podawany przez API, Compose z bazą, lokalną konfiguracją, dwiema sieciami i trwałym wolumenem. Testy dostarczonego zakresu przeszły. Integracje T4/T5/T9 i odbiór w przeglądarce pozostają otwarte; szczegóły w opisie T3. Bez publicznego hostingu i rozstrzygania OD-02. |
 | S1-T4 | Podłączyć bazę aplikacji i przygotować mechanizm migracji | Techniczna podstawa połączenia i kontrolowanej aktualizacji struktury PostgreSQL aplikacji w `application-api`, przez zatwierdzone SQLAlchemy i Psycopg oraz migracje Alembic, uruchamiane automatycznie wyłącznie w fazie startu tego serwisu. Błąd migracji pozostawia tryb diagnostyczny z przyczyną i blokadą funkcji wymagających bazy; ponowienie wymaga restartu. Bez tabel projektów, schematów i wykonań z dalszych story; bez nadawania generatorowi i walidatorowi dostępu do tej bazy. Migracje nie należą do health checków. Dokładne wersje i zgodność wymagają sprawdzenia; ochrona przed równoczesnym wykonaniem, tryb połączeń i transakcji pozostają do uzgodnienia. |
 | S1-T5 | Przygotować granicę magazynu plików i lokalny adapter | Oddzielenie logiki od fizycznego katalogu plików. Zaimplementowano lokalny adapter i diagnostykę zgodnie z decyzją architekta w procesie #20; review i odbiór ręczny pozostają osobnymi etapami. Bez eksportu, API pobierania, metadanych kandydatów oraz cyklu życia i sprzątania czatu z S8–S9. |
-| S1-T6 | Przygotować lokalny kontekst właściciela i granicę kontroli dostępu | Wymienne źródło kontekstu operacji oraz podstawa sprawdzania dostępu bez logowania. Stały lokalny identyfikator i szczegółowa polityka są propozycjami do decyzji. Podłączenie rzeczywistych zasobów należy do ich story. Bez kont, tokenów logowania i obsługi wielu użytkowników. |
+| S1-T6 | Przygotować lokalny kontekst właściciela i granicę kontroli dostępu | Zaimplementowano wymienne źródło kontekstu i politykę własności bez logowania, zgodnie z decyzją architekta w procesie #21; review i odbiór pozostają osobnymi etapami. Podłączenie rzeczywistych zasobów należy do ich story. Bez kont, tokenów logowania i obsługi wielu użytkowników. |
 | S1-T7 | Skonfigurować wspólne narzędzia kontroli jakości i testów | Powtarzalne sprawdzanie kodu i uruchamianie testów frontendowych, backendowych oraz infrastruktura testów integracyjnych. Bez przenoszenia testów konkretnych funkcji do osobnego końcowego etapu. pytest dla backendów zatwierdzony; pozostałe narzędzia i szczegóły konfiguracji wymagają uzgodnienia. |
 | S1-T8 | Sprawdzić uruchomienie całości w przeglądarce i opisać obsługę środowiska | Sprawdzony start, minimalne połączenie frontendu z API i instrukcja uruchomienia, zatrzymania oraz diagnostyki. Bez czatu i przepływu generowania. Zatwierdzono podawanie gotowego frontendu przez `application-api`, z osobnym Vite wyłącznie do developmentu. Minimalny kontrakt sprawdzenia połączenia oraz szczegóły konfiguracji wymagają uzgodnienia. |
 | S1-T9 | Przygotować niezależny monitor serwisów i panel diagnostyczny | Osobny proces monitora i panel w przeglądarce, niezależne od działania `application-api`. Kontrole przy uruchomieniu i co 30 minut oraz bezpłatna, niedestrukcyjna akcja „Sprawdź teraz”, bez wpływu na harmonogram. Raporty pokazują uzgodnione stany, przyczyny i ograniczenia bez sekretów. Zakres zaakceptowany; kontrakty, technologia, zabezpieczenia i obsługa jednoczesnych kontroli wymagają doprecyzowania. |
@@ -184,7 +184,7 @@ przekazanie pełnego zakresu do implementacji.
 | [S1-T3 — Lokalne uruchomienie](#s1-t3--przygotować-lokalne-uruchomienie-backendów-i-baz-w-docker-compose) | T1/T2 wykorzystane; dalsze integracje T4/T5/T9 | Podstawowy zakres zaimplementowany i sprawdzony przez HTTP. Otwarte: integracje T4/T5/T9 i ręczny odbiór w przeglądarce. |
 | [S1-T4 — Baza i migracje](#s1-t4--podłączyć-bazę-aplikacji-i-przygotować-mechanizm-migracji) | T1, T2; kontrakt diagnostyki i środowisko PostgreSQL do testów | Ochrona równoczesnych migracji, połączenia, transakcje, uprawnienia i testy mechanizmu. |
 | [S1-T5 — Granica magazynu plików](#s1-t5--przygotować-granicę-magazynu-plików-i-lokalny-adapter) | T1, T2 | Adapter, konfigurację i diagnostykę zaimplementowano; review i odbiór ręczny pozostają do wykonania. |
-| [S1-T6 — Kontekst właściciela i dostęp](#s1-t6--przygotować-lokalny-kontekst-właściciela-i-granicę-kontroli-dostępu) | T1 | Źródło i postać kontekstu oraz polityka dostępu. |
+| [S1-T6 — Kontekst właściciela i dostęp](#s1-t6--przygotować-lokalny-kontekst-właściciela-i-granicę-kontroli-dostępu) | T1 | Kontrakt i adapter zaimplementowano; review i odbiór ręczny pozostają do wykonania. |
 | [S1-T7 — Narzędzia jakości i testów](#s1-t7--skonfigurować-wspólne-narzędzia-kontroli-jakości-i-testów) | T1 | Narzędzia poza pytest, reguły i środowisko testów integracyjnych. |
 | [S1-T8 — Sprawdzenie całości i instrukcja](#s1-t8--sprawdzić-uruchomienie-całości-w-przeglądarce-i-opisać-obsługę-środowiska) | Dostarczone zakresy T1–T7 oraz T9 | Domknięcie zależności i minimalny kontrakt sprawdzenia połączenia frontend–API. |
 | [S1-T9 — Monitor i panel diagnostyczny](#s1-t9--przygotować-niezależny-monitor-serwisów-i-panel-diagnostyczny) | T1, T2; kontrakt diagnostyki i integracja startu z T3 | Technologia, kontrakty, konkretne próby, zabezpieczenia, limity czasu, świeżość i jednoczesne kontrole. |
@@ -712,35 +712,23 @@ do pamięci; nie ustanawia limitu rozmiaru uploadu ani retencji.
 
 #### S1-T6 — Przygotować lokalny kontekst właściciela i granicę kontroli dostępu
 
-**Status:** szkic celu i granic; blokady przed implementacją.
+**Status:** implementacja przygotowana do niezależnego review; ręczny odbiór pozostaje osobnym krokiem.
 
-**Cel:** operacje korzystają z wymiennego źródła informacji o właścicielu,
-bez implementowania logowania w jednoosobowym MVP.
+**Cel i źródło:** wymienne źródło kontekstu i podstawa kontroli własności
+bez logowania, na podstawie REQ-001, REQ-066 i AC-28
+[specyfikacji](specyfikacja_mvp.md), zadania [#21](https://github.com/jwieczor03/mgr-llm-data-generator/issues/21)
+oraz [przygotowania do hostowania](przygotowanie_do_hostowania.md).
 
-**Źródło i punkt startowy:** REQ-001, REQ-066 i AC-28
-[specyfikacji](specyfikacja_mvp.md) oraz
-[przygotowanie do hostowania](przygotowanie_do_hostowania.md).
-Brak kodu; `LocalActorContextProvider` i jego ścieżka w LLD
-pozostają propozycjami.
+**Zależność:** T1. Kontrakt i uzasadnienie zapisano w
+[rejestrze](ustalenia_architektoniczne.md#kontekst-właściciela-i-polityka-dostępu--s1-t6).
+Zaimplementowano lokalne źródło, politykę oraz zależności API. Testy
+sprawdzają walidację, odmowę, wymianę zależności i brak kontekstu przez
+trasę istniejącą wyłącznie w testach.
 
-**Zależności:** T1 i uzgodnienie kontraktu kontekstu oraz polityki dostępu.
-
-**Zakres do opisania po decyzji:** wymienne źródło lokalnego kontekstu
-operacji i podstawa sprawdzania dostępu. Nie wpisywać stałego
-identyfikatora jako decyzji — to nadal propozycja. Podłączenie
-rzeczywistych projektów, wykonań i plików należy do ich story.
-
-**Poza zakresem:** konta, tokeny logowania, wielu użytkowników
-i traktowanie lokalnego kontekstu jako uwierzytelniania.
-
-**Kryteria do doprecyzowania i planowane sprawdzenia:** po decyzji
-sprawdzić uzyskanie kontekstu i wyniki dopuszczenia/odmowy zgodnie
-z zaakceptowaną polityką. Zmiana źródła kontekstu nie powinna wymagać
-wprowadzenia logowania do logiki funkcji MVP.
-
-**Do wyjaśnienia:** postać i źródło kontekstu, stały lokalny identyfikator,
-reguły dostępu, zachowanie przy braku kontekstu i odmowie,
-lokalizacja modułu. To zadanie nie jest gotowe do implementacji.
+**Granice:** podłączenie projektów, wykonań i plików należy do ich story.
+Nie ma kont, logowania ani izolacji rzeczywistych zasobów. Ten fundament
+nie realizuje całego AC-28 ani nie zabezpiecza hostingu. Review i ręczny
+odbiór nie są potwierdzone samą implementacją.
 
 #### S1-T7 — Skonfigurować wspólne narzędzia kontroli jakości i testów
 
