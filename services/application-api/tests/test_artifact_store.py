@@ -177,3 +177,46 @@ def test_configuration_guard(monkeypatch, tmp_path):
         result = client.get('/protected')
         assert result.status_code == 503
         assert result.json()['detail']['code'] == 'configuration_unavailable'
+
+
+@pytest.mark.parametrize('suffix', ['/', '/.', '//./', '/nested/..'])
+def test_root_symlink_with_suffix_is_rejected_across_runtime(monkeypatch, tmp_path, suffix):
+    project, working = tmp_path / 'project', tmp_path / 'working'
+    project.mkdir()
+    working.mkdir()
+    monkeypatch.setenv('ARTIFACT_PROJECT_ROOT', str(project) + suffix)
+    monkeypatch.setenv('ARTIFACT_WORKING_ROOT', str(working) + suffix)
+    app = create_app()
+
+    @app.get('/protected', dependencies=[Depends(require_capabilities('artifacts'))])
+    def protected(): return {'ok': True}
+
+    with TestClient(app) as client:
+        assert client.get('/health/artifacts').json()['status'] == 'ready'
+        assert client.get('/protected').status_code == 200
+        ref = app.state.artifacts.put('project', b'private')
+        working.rmdir()
+        working.symlink_to(project, target_is_directory=True)
+        report = client.get('/health/artifacts').json()
+        assert report['project'] == {'status': 'ready', 'code': None}
+        assert report['working'] == {'status': 'unavailable', 'code': 'invalid_resource'}
+        assert str(tmp_path) not in str(report)
+        response = client.get('/protected')
+        assert response.status_code == 503
+        assert response.json()['detail']['code'] == 'artifacts_unavailable'
+        wrong_namespace = ArtifactRef('working', ref.id)
+        for operation in (app.state.artifacts.get, app.state.artifacts.delete):
+            with pytest.raises(ArtifactError, match='invalid_resource'):
+                operation(wrong_namespace)
+        assert app.state.artifacts.get(ref) == b'private'
+        working.unlink()
+        working.mkdir()
+        assert client.get('/health/artifacts').json()['status'] == 'ready'
+        assert client.get('/protected').status_code == 200
+
+
+@pytest.mark.parametrize('working_suffix', ['/./', '/child/..', '/nested/../subdir'])
+def test_configuration_rejects_roots_overlapping_after_normalization(monkeypatch, tmp_path, working_suffix):
+    monkeypatch.setenv('ARTIFACT_PROJECT_ROOT', str(tmp_path / 'project') + '/.')
+    monkeypatch.setenv('ARTIFACT_WORKING_ROOT', str(tmp_path / 'project') + working_suffix)
+    assert 'artifacts' in load_config(tmp_path / 'absent.env')[1]['blocked_capabilities']

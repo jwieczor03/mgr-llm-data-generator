@@ -49,7 +49,9 @@ def _validate(ref: ArtifactRef) -> None:
 
 class LocalArtifactStore:
     def __init__(self, project_root: str, working_root: str):
-        self.roots = {"project": project_root, "working": working_root}
+        # Normalize before open so a trailing slash or dot cannot bypass O_NOFOLLOW.
+        self.roots = {"project": os.path.normpath(project_root),
+                      "working": os.path.normpath(working_root)}
 
     def _root(self, namespace: Namespace) -> int:
         if namespace not in self.roots:
