@@ -2,22 +2,20 @@ import os
 import shutil
 import socket
 import subprocess
-import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from application_api.bootstrap import create_app
+from application_api.config import Settings, require_capabilities
+from application_api.database import MIGRATION_LOCK_KEY, MIGRATIONS, Database
 from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from application_api.bootstrap import create_app
-from application_api.config import Settings, require_capabilities
-from application_api.database import Database, MIGRATION_LOCK_KEY, MIGRATIONS
-
-pytestmark = pytest.mark.skipif(os.getenv("RUN_DATABASE_TESTS") != "1", reason="wymaga izolowanego Docker PostgreSQL")
+pytestmark = [pytest.mark.integration, pytest.mark.skipif(os.getenv("RUN_DATABASE_TESTS") != "1", reason="wymaga izolowanego Docker PostgreSQL")]
 PASSWORD = "test:@/%$' secret"
 
 
@@ -43,7 +41,7 @@ def postgres():
         docker("exec", name, "psql", "-U", "postgres", "-d", "testdb", "-v", "ON_ERROR_STOP=1", "-c", sql)
         yield name, port
     finally:
-        docker("rm", "-f", name)
+        docker("rm", "-fv", name)
 
 
 @pytest.fixture
@@ -177,7 +175,7 @@ def test_provisioning(postgres):
         assert "app_user|f|f|f" in result.stdout
         assert result.stdout.splitlines()[-1] == "app_user"
     finally:
-        docker("rm", "-f", name)
+        docker("rm", "-fv", name)
         docker("image", "rm", image)
 
 

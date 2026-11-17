@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-
 from validation_service.bootstrap import app
 
 

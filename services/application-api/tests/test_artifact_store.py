@@ -3,22 +3,15 @@ import os
 import uuid
 
 import pytest
-from fastapi import Depends
-from fastapi.testclient import TestClient
-
-from application_api.artifact_store import ArtifactError, ArtifactRef, LocalArtifactStore
+from application_api.artifact_store import (
+    ArtifactError,
+    ArtifactRef,
+    LocalArtifactStore,
+)
 from application_api.bootstrap import create_app
 from application_api.config import load_config, require_capabilities
-
-
-@pytest.fixture(autouse=True)
-def isolate_database_configuration(monkeypatch, tmp_path):
-    for name in ("APP_DB_HOST", "APP_DB_PORT", "APP_DB_NAME", "APP_DB_USER", "APP_DB_PASSWORD"):
-        monkeypatch.delenv(name, raising=False)
-    # Do not read a developer's local service .env while testing runtime diagnostics.
-    import application_api.bootstrap as bootstrap
-    original = bootstrap.load_config
-    monkeypatch.setattr(bootstrap, "load_config", lambda: original(tmp_path / "absent.env"))
+from fastapi import Depends
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -97,7 +90,8 @@ def test_fault_before_publish_and_cleanup_failure(store, tmp_path, monkeypatch):
     monkeypatch.setattr(os, 'link', real_link)
     real_unlink = os.unlink
     def fail_temp(path, *args, **kwargs):
-        if str(path).startswith('.tmp-'): raise OSError(errno.EIO, 'private')
+        if str(path).startswith('.tmp-'):
+            raise OSError(errno.EIO, 'private')
         return real_unlink(path, *args, **kwargs)
     monkeypatch.setattr(os, 'unlink', fail_temp)
     ref = store.put('project', b'complete')
@@ -110,10 +104,12 @@ def test_missing_root_and_permission_error(store, tmp_path, monkeypatch):
     (tmp_path / 'project').rmdir()
     ref = ArtifactRef('project', str(uuid.uuid4()))
     for operation in (store.get, store.delete):
-        with pytest.raises(ArtifactError, match='missing_root'): operation(ref)
+        with pytest.raises(ArtifactError, match='missing_root'):
+            operation(ref)
     real_open = os.open
     def denied(path, *args, **kwargs):
-        if path == store.roots['working']: raise PermissionError(errno.EACCES, 'secret')
+        if path == store.roots['working']:
+            raise PermissionError(errno.EACCES, 'secret')
         return real_open(path, *args, **kwargs)
     monkeypatch.setattr(os, 'open', denied)
     assert store.report()['working']['code'] == 'permission_denied'
@@ -121,7 +117,8 @@ def test_missing_root_and_permission_error(store, tmp_path, monkeypatch):
 
 def test_configuration_and_runtime_health(monkeypatch, tmp_path):
     project, working = tmp_path / 'project', tmp_path / 'working'
-    for root in (project, working): root.mkdir()
+    for root in (project, working):
+        root.mkdir()
     monkeypatch.setenv('ARTIFACT_PROJECT_ROOT', str(project))
     monkeypatch.setenv('ARTIFACT_WORKING_ROOT', str(working))
     app = create_app()

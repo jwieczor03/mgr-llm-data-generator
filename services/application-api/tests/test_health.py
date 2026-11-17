@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from application_api.bootstrap import app
+from fastapi.testclient import TestClient
 
 
 def test_liveness():

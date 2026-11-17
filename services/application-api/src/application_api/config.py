@@ -1,8 +1,8 @@
-from pathlib import Path
-from ipaddress import ip_address
 import re
-from urllib.parse import urlsplit
+from ipaddress import ip_address
+from pathlib import Path
 from unicodedata import category
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from pydantic import SecretStr, ValidationError, field_validator

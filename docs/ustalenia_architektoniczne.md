@@ -788,6 +788,26 @@ katalogu, `link`, `replace`, `fsync`, `O_NOFOLLOW`; oraz
 tworzenie plików tymczasowych i ograniczenia sprzątania po zabiciu procesu.
 To podstawa doboru mechanizmów; działanie adaptera potwierdzą testy zadania.
 
+### Decyzje architekta — realizacja S1-T7
+
+**Status: ustalone przez rolę architekta w procesie zadania [#22](https://github.com/jwieczor03/mgr-llm-data-generator/issues/22).** Nie jest to ręczny odbiór użytkownika.
+
+Zachowujemy trzy osobne środowiska uv i npm frontendu. Ruff 0.15.13
+sprawdza E4, E7, E9, F i I dla Python 3.14 we wspólnej konfiguracji;
+nie uruchamiamy globalnego formatowania. Pytest ma jawny katalog testów,
+ścisłe markery i osobne uruchomienia. Frontend korzysta z istniejącego
+ścisłego TypeScript oraz kontroli nieużywanych deklaracji, Vitest 4.1.12,
+jsdom 29.0.0 i React Testing Library. Test ekranu w jsdom nie jest testem
+rzeczywistej przeglądarki. Wspólny skrypt zatrzymuje się przy błędzie;
+integracje bazy i Compose uruchamia się jawnie, na izolowanych zasobach.
+Nie dodajemy mypy, ESLint, Prettier, Playwright, coverage, xdist ani CI.
+
+Podstawy doboru: [Ruff](https://docs.astral.sh/ruff/configuration/),
+[Vitest](https://vitest.dev/guide/), [środowiska Vitest](https://vitest.dev/guide/environment),
+[Testing Library](https://testing-library.com/docs/react-testing-library/intro/),
+[markery pytest](https://docs.pytest.org/en/stable/how-to/mark.html) i
+[tmp_path](https://docs.pytest.org/en/stable/how-to/tmp_path.html).
+
 ## 5. Co nadal jest otwarte
 
 **Doprecyzowanie S2 — 14 listopada 2026:** zatwierdzono również obsługę

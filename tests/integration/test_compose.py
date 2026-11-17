@@ -2,22 +2,21 @@
 
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import subprocess
+from pathlib import Path
 from urllib.request import urlopen
 from uuid import uuid4
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 BACKENDS = ("application-api", "generation-service", "validation-service")
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.integration, pytest.mark.skipif(
     os.environ.get("RUN_COMPOSE_TESTS") != "1",
     reason="Set RUN_COMPOSE_TESTS=1 to build and test an isolated Docker Compose environment.",
-)
+)]
 
 
 class Stack:
