@@ -792,9 +792,9 @@ ani wyglądu komunikatu bez decyzji użytkownika.
 
 #### S1-T9 — Przygotować niezależny monitor serwisów i panel diagnostyczny
 
-**Status:** wydzielenie zadania i poniższy zakres uzgodniono
-14 listopada 2026. Opis pozostaje do doprecyzowania przed implementacją;
-nie utworzono podzadań ani GitHub Issue.
+**Status:** implementacja w toku, [issue #24](https://github.com/jwieczor03/mgr-llm-data-generator/issues/24). Decyzje techniczne i wizualne
+podjęto 17 listopada 2026 w delegowanym procesie realizacji. Niezależne
+review i ręczny odbiór użytkownika pozostają osobnymi krokami.
 
 **Story nadrzędne:** S1 — Fundament aplikacji i lokalne uruchomienie.
 
@@ -806,8 +806,8 @@ bez debugowania, także gdy główna aplikacja jest niedostępna.
 w [rejestrze ustaleń](ustalenia_architektoniczne.md) oraz sekcja
 „Szczegółowa diagnostyka i monitoring” w
 [kontraktach API](lld/kontrakty_api.md).
-Monitor i jego panel są do utworzenia; ich ścieżek i technologii
-jeszcze nie wybrano.
+Monitor i panel implementowane są w `services/monitor-service` i
+`apps/web`; szczegóły kontraktu zapisano w powyższym LLD.
 
 **Uzgodniony zakres:**
 1. Osobny proces regularnie odpytuje health checki serwisów,
@@ -837,16 +837,17 @@ działającego procesu za dowód gotowości do generowania. Monitor nie
 ponawia generowania lub walidacji. Osobny proces nie gwarantuje
 odporności na awarię hosta ani wykrycia własnego zatrzymania.
 Płatne sprawdzenia wymagają odrębnej ręcznej akcji i zgody użytkownika;
-nie ustalono jeszcze, czy ich obsługa ma należeć do S1-T9.
+ich obsługa pozostaje poza zakresem S1-T9.
 
 **Zależności i blokady:** szkielety serwisów S1-T1, konfiguracja
 i ochrona sekretów S1-T2 oraz uzgodniony kontrakt szczegółowej
 diagnostyki backendów. Uzgodniono 15 listopada 2026 uruchamianie monitora
 z panelem jako osobnej usługi w tym samym Docker Compose (integracja
-w S1-T3), niezależnej od działania `application-api`. Technologia,
-obraz, konfiguracja usługi i narzędzie harmonogramowania pozostają otwarte.
+w S1-T3), niezależnej od działania `application-api`. Wybrano FastAPI,
+React/Vite i harmonogram oparty na asyncio; szczegóły i ograniczenia
+opisują [kontrakty API](lld/kontrakty_api.md).
 
-**Kryteria do późniejszej weryfikacji:**
+**Kryteria weryfikacji:**
 - Po zatrzymaniu `application-api` panel nadal można otworzyć i odczytać
   wynik monitorowania tego serwisu, zamiast polegać na jego ostatnim
   raporcie zbiorczym.
@@ -859,19 +860,19 @@ obraz, konfiguracja usługi i narzędzie harmonogramowania pozostają otwarte.
 - Brak wymaganego sekretu, niedostępne API, brak zasobu i brak dostępu
   do zasobu dają odpowiadające im przyczyny i ograniczenia.
   Sprawdzić trzy uzgodnione poziomy zdolności na przypadkach
-  wynikających z przyszłego katalogu prób, bez wymyślania ich mapowania.
+  wynikających z katalogu prób w [kontrakcie](lld/kontrakty_api.md).
 - Health check i kontrole monitora nie uruchamiają migracji,
   także po usunięciu przyczyny wcześniejszego błędu migracji.
 
-Powyższe scenariusze są planowane, nie wykonane. Komendy i szczegóły
-testów zostaną uzupełnione po wyborze technologii i kontraktów.
+**Wyniki sprawdzeń:** testy izolowanego Compose potwierdziły dostępność
+panelu i niezależne wyniki serwisów po zatrzymaniu API. Pozostałe wyniki
+i ograniczenia sprawdzeń należy ocenić według dowodów w PR. Wygląd,
+klawiatura i działanie panelu w rzeczywistej przeglądarce nie zostały
+jeszcze sprawdzone; ręczny odbiór należy do użytkownika.
 
-**Do wyjaśnienia przed pełnym opisem wykonawczym:** technologia i miejsce
-w repozytorium, kontrakt health checków i wywołania ręcznej kontroli,
-limity czasu, świeżość i prezentacja wyników, zabezpieczenia panelu,
-obsługa nakładających się kontroli oraz awarii samego monitora.
-Dokładny podział prac nad diagnostyką backendów względem S1-T2 i S1-T9
-wymaga doprecyzowania, aby nie powielać implementacji.
+**Ograniczenia obecnego zakresu:** raport dotyczy fundamentu. Generator
+i walidator są szkieletami; nie sprawdzono dostawcy ani modelu LLM.
+Monitor nie wykrywa własnego zatrzymania ani awarii hosta.
 
 ### S2 — Zapisane projekty i rozpoznawanie schematu
 

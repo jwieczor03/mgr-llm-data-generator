@@ -858,3 +858,28 @@ oddzielnym krokiem. Nie dostarczono jeszcze funkcji generowania ani
 monitora T9. Nie wykonywano płatnych
 wywołań modeli. Kontrola frontendu w przeglądarce pozostaje niewykonana
 z powodu braku dostępnego narzędzia i uprawnień Computer Use.
+
+### S1-T9 — diagnostyka fundamentu (17 listopada 2026)
+
+Decyzja architekta w delegowanym procesie realizacji: osobny monitor
+FastAPI i panel React/Vite, sieć HTTP bez dostępu do sieci bazy, lokalny
+adres 127.0.0.1:8080. `GET /health/ready` udostępnia raport fundamentu;
+monitor odpytuje trzy serwisy niezależnie. Raporty są ograniczone do
+bezpiecznych kodów i nie potwierdzają działania LLM. Brak implementacji
+generowania i pełnej walidacji jest jawnym ograniczeniem.
+
+Harmonogram używa zegara monotonicznego: start i co 30 minut, ręczna
+kontrola bez przesunięcia terminu. Próby HTTP mają limity czasu i 64 KiB;
+wynik jest nieaktualny po 1830 sekundach. Panel ogranicza Host i Origin,
+a POST wymaga nagłówka; nie jest to ochrona przed lokalnym procesem.
+Magazyn zapisuje i usuwa własny plik próbny, nie jest to test tylko do
+odczytu; błąd usunięcia jest zgłaszany. Kontrakt w [LLD](lld/kontrakty_api.md).
+
+**Korekta po review PR #44:** decyzja architekta z 17 listopada 2026
+ustala równoległe próby czterech zależności API, 6 sekund oczekiwania
+na każdą, cel do 8 sekund dla raportu API i 10 sekund oczekiwania
+monitora na API (odczyt HTTP również 10 sekund). Pozostałe serwisy mają
+6 sekund na całe żądanie i 5 sekund na odczyt. Limit oczekiwania nie
+przerywa już działającego wątku lokalnego; katalog prób jest wymagany
+w całości i bez duplikatów. Pozostałe limity i harmonogram nie zmieniają
+się. Szczegóły w [kontraktach API](lld/kontrakty_api.md).

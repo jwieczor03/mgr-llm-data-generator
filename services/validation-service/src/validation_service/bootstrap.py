@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -31,3 +32,18 @@ def live() -> dict[str, str]:
 @app.get("/health/config")
 def config(request: Request) -> dict:
     return request.app.state.config_report
+
+
+@app.get("/health/ready")
+def ready(request: Request) -> dict:
+    valid = request.app.state.config_report["status"] == "valid"
+    return {"service": "validation-service", "scope": "foundation",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "capacity": "capable" if valid else "incapable",
+            "checks": [
+                {"id": "process", "status": "ok", "code": "ok", "message": "Proces odpowiada.", "limitations": []},
+                {"id": "configuration", "status": "ok" if valid else "failed",
+                 "code": "ok" if valid else "configuration_unavailable",
+                 "message": "Konfiguracja jest poprawna." if valid else "Konfiguracja jest niedostępna.", "limitations": []}],
+            "limitations": ["Serwis jest szkieletem. Generowanie i walidacja danych nie są jeszcze zaimplementowane.",
+                            "Nie sprawdzono dostawcy ani modelu LLM; nie wykonuje się płatnych prób."]}

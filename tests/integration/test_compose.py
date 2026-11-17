@@ -30,7 +30,7 @@ class Stack:
         # Host configuration must not change the test's credentials or project selection.
         self.environment = {
             key: value for key, value in os.environ.items()
-            if not key.startswith(("COMPOSE_", "POSTGRES_", "APP_DB_"))
+            if key in {"PATH", "HOME", "TMPDIR", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "SSL_CERT_FILE"}
         }
 
     def run(self, *arguments: str, input: str | None = None) -> str:
@@ -75,6 +75,7 @@ def stack(tmp_path_factory):
         )
         if service == "application-api":
             overrides += '    ports: !override ["127.0.0.1::8000"]\n'
+    overrides += '  monitor-service:\n    env_file: !override []\n    ports: !override ["127.0.0.1::8000"]\n'
     (directory / "override.yaml").write_text(overrides)
     environment = Stack(directory)
     try:
@@ -204,3 +205,32 @@ for item in json.loads(sys.argv[1]):
         mounts = json.loads(inspect.stdout)[0]["Mounts"]
         assert all("artifact-project-data" not in m.get("Name", "") and
                    "artifact-working-data" not in m.get("Name", "") for m in mounts)
+
+
+def test_independent_monitor_after_api_stops(stack: Stack):
+    import time
+    from urllib.request import Request
+
+    address = stack.run("port", "monitor-service", "8000")
+    base = f"http://{address}"
+    assert b"Stan serwis" in urlopen(base + "/", timeout=5).read()
+    stack.run("stop", "application-api")
+    try:
+        request = Request(base + "/api/v1/check", method="POST", headers={"X-Monitor-Request": "1"})
+        for _ in range(30):
+            try:
+                urlopen(request, timeout=5).read()
+                break
+            except Exception:
+                time.sleep(1)
+        for _ in range(30):
+            data = json.loads(urlopen(base + "/api/v1/report", timeout=5).read())
+            if not data["in_progress"] and data["checked_at"]:
+                break
+            time.sleep(1)
+        services = {item["service"]: item for item in data["services"]}
+        assert services["application-api"]["capacity"] == "incapable"
+        assert services["generation-service"]["capacity"] == "capable"
+        assert services["validation-service"]["capacity"] == "capable"
+    finally:
+        stack.run("up", "-d", "--wait", "application-api")

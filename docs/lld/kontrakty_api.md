@@ -48,52 +48,48 @@ Odpowiedź nie zawiera wartości konfiguracji. Nie sprawdza ona połączeń;
 T9 obejmuje szerszą diagnostykę i monitor. Zależne operacje zwracają 503
 z kodem `configuration_unavailable` i listą zablokowanych obszarów.
 
-### Szczegółowa diagnostyka i monitoring — zakres uzgodniony, kontrakt otwarty
+### Szczegółowa diagnostyka i monitoring — S1-T9
 
-Każdy serwis ma sprawdzać poprawność uruchomienia, wymagane zmienne
-środowiskowe i sekrety, połączenia do wykorzystywanych zewnętrznych API
-oraz istnienie i dostęp do wymaganych zasobów wewnętrznych.
-Wynik rozróżnia zdolność do działania, częściową zdolność i całkowity
-brak zdolności; podaje przyczyny i ograniczenia bez wartości sekretów.
-Każdy backend sprawdza własne bezpośrednie zależności, a `application-api`
-zbiera statusy. Wspólny mechanizm odpytuje serwisy przy uruchamianiu,
-a następnie co 30 minut. Zatwierdzono jego działanie
-jako osobnego procesu monitora, niezależnego od trzech backendów.
-Monitor sprawdza również `application-api` i nie polega wyłącznie
-na jego zbiorczym raporcie, aby wykrywać zatrzymanie tego API.
-Zatwierdzono osobny panel wyników w przeglądarce. Udostępnianie panelu
-i odczyt wyników mają działać również przy niedostępnej głównej
-aplikacji, bez zależności od działania `application-api`.
-Nie ustalono technologii, sposobu uruchomienia monitora ani wyglądu,
-adresu i zabezpieczeń panelu.
+Decyzje techniczne architekta w delegowanym procesie z 17 listopada 2026.
+Raporty opisują wyłącznie `scope: foundation`, czyli obecny fundament;
+nie potwierdzają gotowości generowania ani pełnej walidacji. Generator
+oraz walidator są szkieletami; nie sprawdza się modeli ani dostawców LLM.
 
-Zatwierdzono przycisk „Sprawdź teraz” w panelu: uruchamia nową,
-bezpłatną i niedestrukcyjną diagnostykę bez oczekiwania na kontrolę
-okresową. Nie ogranicza się do odczytu poprzedniego wyniku i nie
-uruchamia płatnych prób LLM. Ścieżka, metoda i odpowiedź tej akcji
-oraz obsługa jednoczesnych kontroli pozostają do uzgodnienia.
-Ręczne sprawdzenie nie zmienia harmonogramu automatycznego:
-nie przesuwa następnej kontroli i nie zeruje odstępu 30 minut.
+Każdy backend udostępnia `GET /health/ready`: HTTP 200 i JSON zawierający
+`service`, `scope`, `checked_at` (UTC), `capacity` (`capable`, `partial`,
+`incapable`), `checks` oraz `limitations`. Próba ma `id`, `status` (`ok`,
+`failed`, `not_checked`), `code`, `message` i `limitations`. Zdolność
+wylicza się z prób poza `process`: wszystkie poprawne oznaczają `capable`,
+wszystkie niepoprawne lub niesprawdzone `incapable`, pozostałe `partial`.
+`application-api` sprawdza bazę, magazyn i oba pozostałe serwisy;
+pozostałe sprawdzają proces i konfigurację. `/health/live` nie zmienia się.
 
-Automatyczne health checki wykonują wyłącznie bezpłatne, niedestrukcyjne
-próby. Sprawdzenie wymagające płatnego wywołania LLM wymaga ręcznego
-uruchomienia i zgody użytkownika na daną próbę. Nie ustalono kontraktu
-takiej akcji ani mechanizmu potwierdzania kosztu. Nie wykonano płatnych
-prób.
+Monitor udostępnia `GET /api/v1/report` jako ostatnią kompletną migawkę:
+`scope`, `checked_at`, `freshness` (`not_checked`, `fresh`, `stale`),
+`in_progress`, `run_id`, `next_automatic_at`, `capacity`, `services` i
+`limitations`. Brak wyniku ma pustą listę serwisów i null dla czasu oraz
+zdolności. Po 1830 sekundach migawka jest nieaktualna. `POST /api/v1/check`
+z nagłówkiem `X-Monitor-Request: 1` rozpoczyna próbę: 202 z `run_id` i
+`status: running`, albo 409 z `code: check_in_progress` i aktualnym `run_id`.
+Kontrola automatyczna jest przy starcie i co 30 minut, a ręczna nie zmienia
+harmonogramu. Jednocześnie działa jedna kontrola. Kolizja z automatyczną
+powoduje wykonanie jednej oczekującej kontroli po zakończeniu bieżącej.
 
-Dla szerszej diagnostyki T9 nie wybrano jeszcze ścieżki, formatu pól,
-kodów HTTP, zabezpieczeń ani limitów czasu. Raport konfiguracji T2 opisano powyżej. Nie zatwierdza to
-automatycznie proponowanego `/internal/v1/health/ready` i jego pól.
-Zatwierdzono tryb diagnostyczny mimo brakujących zmiennych lub sekretów
-oraz błędnej konfiguracji: health check podaje przyczyny i ograniczenia,
-a operacje wymagające tej konfiguracji są zablokowane. Zastępuje to
-wcześniejszą zasadę blokowania startu procesu przy takich brakach.
-Nie jest to gwarancja działania endpointu przy błędzie uniemożliwiającym
-uruchomienie samego serwera diagnostyki; sposób zgłoszenia takiej awarii
-pozostaje otwarty.
-Nie zmieniono kontraktu `/health/live`; diagnostyka gotowości nie jest
-potwierdzeniem poprawności każdego przyszłego wykonania biznesowego.
-Nie wykonano implementacji ani testów.
+Raporty nie zawierają sekretów ani surowych odpowiedzi upstream. Odbiorca
+wymaga dokładnego katalogu prób właściwego dla serwisu, bez powtórzeń;
+niepełny lub sprzeczny raport oznacza `invalid_report`. Błędny adres lub
+wyjątek jednej próby nie zastępuje wyników pozostałych serwisów.
+
+Próby bazy, magazynu i obu usług w API ruszają równolegle. Każda ma
+maksymalnie 6 sekund oczekiwania; dla raportu API przewidziano do 8 sekund.
+Monitor czeka na API do 10 sekund (w tym timeout odczytu HTTP 10 sekund),
+a na każdy pozostały serwis do 6 sekund (odczyt 5 sekund). Połączenie ma
+limit 2 sekund, odpowiedź 64 KiB, a runda 30 sekund. Timeout oczekiwania
+na lokalną próbę nie zatrzymuje wykonywanego już wątku ani jego sprzątania.
+Monitor nie uruchamia operacji LLM. Nie ma
+logowania i jest przeznaczony do lokalnego użycia. Host jest ograniczony do
+lokalnych nazw, POST sprawdza nagłówek i Origin, a CORS nie jest włączony.
+Dawna propozycja `/internal/v1/health/ready` nie jest kontraktem T9.
 
 ### Błędy
 

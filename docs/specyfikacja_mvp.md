@@ -826,8 +826,8 @@ i dostęp do wymaganych zasobów wewnętrznych.
   Nie oznacza to odporności na awarię całego hosta.
 - Wyniki monitorowania są dostępne w osobnym panelu w przeglądarce.
   Panel i odczyt wyników działają również przy niedostępnej głównej
-  aplikacji, bez wymagania działania `application-api`. Wygląd,
-  technologia, adres i zabezpieczenia panelu pozostają do ustalenia.
+  aplikacji, bez wymagania działania `application-api`. Decyzje techniczne
+  dla S1-T9 opisano w [kontraktach API](lld/kontrakty_api.md).
 - Panel udostępnia przycisk „Sprawdź teraz”. Uruchamia on nową,
   bezpłatną i niedestrukcyjną diagnostykę bez czekania na kolejną
   kontrolę okresową, a nie tylko odczytuje poprzedni wynik.
@@ -844,10 +844,8 @@ i dostęp do wymaganych zasobów wewnętrznych.
   biznesowych. Diagnostyka nie gwarantuje powodzenia każdego przyszłego
   wykonania ani uruchomienia endpointu przy awarii samego serwera.
 
-**Do wyjaśnienia:** katalog konkretnych prób i zakres potwierdzanych
-uprawnień, kontrakt i ochrona raportu, szczegóły prezentacji w panelu,
-limity czasu, świeżość wyników oraz wykrywanie awarii samego monitora
-i obsługa awarii samej diagnostyki. Podział odpowiedzialności
+**Do wyjaśnienia:** przyszłe próby i uprawnienia wykraczające poza
+obecny fundament oraz wykrywanie awarii samego monitora poza jego procesem. Podział odpowiedzialności
 serwisów opisuje [rejestr ustaleń architektonicznych](ustalenia_architektoniczne.md).
 Wymagania opisują planowane zachowanie, nie wynik wykonanych testów.
 

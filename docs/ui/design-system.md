@@ -191,3 +191,15 @@ Zakres i wyniki kontroli znajdują się w [notatkach CHAT-01](screens/czat/notes
 Fundament wizualny jest zaakceptowany. Kolejne ekrany mogą z niego korzystać,
 ale wymagają własnego uzgodnionego zakresu i odbioru. Rozbudowujemy system
 według rzeczywistych potrzeb, nie tworzymy biblioteki na zapas.
+
+### Panel diagnostyczny S1-T9 — decyzje designera, 17 listopada 2026
+
+Decyzje designera w delegowanym procesie realizacji; odbiór użytkownika
+pozostaje osobny. Jedna kolumna przedstawia stan fundamentu, czas i trzy
+niezależne karty z przyczynami i ograniczeniami. Panel rozróżnia brak
+wyniku, kontrolę w toku, nieaktualną migawkę i brak dostępu do monitora.
+Przycisk uruchamia kontrolę bez zmiany harmonogramu. Motyw początkowo
+wynika z preferencji systemu; zmiana dotyczy tylko bieżącej strony.
+Runtime korzysta bezpośrednio z `shared/tokens.css`: tło `--sidebar`,
+powierzchnia `--canvas`, karty `--surface-container`, kolory stanów
+i fokus z istniejących tokenów.

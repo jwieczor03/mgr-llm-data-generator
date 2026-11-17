@@ -68,8 +68,7 @@ szkielety aplikacji, konfigurację, lokalny start, bazę i migracje,
 magazyn plików, dostęp, narzędzia testów, sprawdzenie całości
 oraz niezależny monitor z panelem diagnostycznym.
 T1–T3 dostarczają szkielety, konfigurację i lokalne uruchomienie.
-T4 ma implementację i testy oraz oczekuje niezależnego review i odbioru;
-pozostałe zadania są opisane w planie wraz ze swoim statusem.
+Status poszczególnych zadań opisano w planie. S1-T9 jest w realizacji.
 
 ### Zadania S3 do późniejszego przeniesienia na GitHub
 
@@ -116,7 +115,7 @@ Lista nierozstrzygniętych szczegółów znajduje się w sekcji 16 specyfikacji.
 Ten zakres uruchamia trzy backendy i PostgreSQL aplikacji. Gotowy frontend
 udostępnia `application-api` pod `http://127.0.0.1:8000`, bez serwera Vite.
 To nadal fundament aplikacji: S1-T4 dodaje połączenie `application-api`
-z bazą i migracje; monitor z panelem na porcie 8080 należy do T9.
+z bazą i migracje; S1-T9 dodaje monitor z panelem na porcie 8080.
 
 Potrzebny jest działający Docker z Compose co najmniej 2.24.4. Nie trzeba
 instalować Pythona ani Node.js na hoście. Z katalogu głównego repozytorium
@@ -276,6 +275,7 @@ Z katalogu głównego zainstaluj przypięte zależności:
 uv sync --locked --project services/application-api --python 3.14
 uv sync --locked --project services/generation-service --python 3.14
 uv sync --locked --project services/validation-service --python 3.14
+uv sync --locked --project services/monitor-service --python 3.14
 npm ci --prefix apps/web
 ```
 
@@ -405,3 +405,46 @@ uv run --locked --project services/application-api pytest services/application-a
 Testy pokazują zgodność właściciela, odmowę, podmianę źródła i polityki oraz
 bezpieczny błąd braku kontekstu na trasie istniejącej tylko w testach.
 Pełny odbiór izolacji zasobów należy do ich przyszłych story.
+
+### Panel diagnostyczny S1-T9
+
+Po uruchomieniu Compose otwórz `http://127.0.0.1:8080`. Monitor
+działa niezależnie od głównej aplikacji. Przycisk „Sprawdź teraz” wykonuje
+nową kontrolę; automatyczny harmonogram pozostaje niezmieniony. Wyniki
+dotyczą fundamentu, a nie gotowości generowania danych. Nie wykonuje się
+płatnych prób ani rzeczywistych wywołań LLM.
+
+Diagnostyka magazynu zapisuje, odczytuje i usuwa wyłącznie własny losowy
+plik próbny. Przy błędzie usunięcia zgłasza awarię; plik może pozostać.
+Stan i kontrakt opisano w [LLD](docs/lld/kontrakty_api.md). Monitor nie
+wykryje własnego zatrzymania ani awarii hosta.
+
+#### Monitor poza Compose
+
+Uruchom trzy backendy według instrukcji powyżej. W osobnym terminalu
+zbuduj panel i uruchom monitor z tymczasową kopią zasobów:
+
+```sh
+npm run build --prefix apps/web
+monitor_web=$(mktemp -d)
+cp -R apps/web/dist/. "$monitor_web/"
+cp "$monitor_web/monitor.html" "$monitor_web/index.html"
+MONITOR_WEB_PATH="$monitor_web" APPLICATION_API_URL=http://127.0.0.1:8000 \
+  GENERATION_SERVICE_URL=http://127.0.0.1:8001 VALIDATION_SERVICE_URL=http://127.0.0.1:8002 \
+  uv run --locked --project services/monitor-service python -c 'import os; from pathlib import Path; import uvicorn; from monitor_service.bootstrap import create_app; uvicorn.run(create_app(frontend=Path(os.environ["MONITOR_WEB_PATH"])), host="127.0.0.1", port=8080)'
+```
+
+Otwórz `http://127.0.0.1:8080`. Po zakończeniu zatrzymaj monitor i usuń
+utworzony katalog tymczasowy: `rm -r "$monitor_web"`. Używaj tej komendy
+w tym samym terminalu, w którym utworzono katalog.
+
+#### Ręczny odbiór panelu
+
+1. Otwórz panel, sprawdź trzy karty i ich przyczyny oraz ograniczenia.
+2. Zmień motyw, przejdź po przyciskach klawiaturą i sprawdź wąskie okno.
+3. Zatrzymaj `application-api`, wybierz „Sprawdź teraz” i sprawdź, czy
+   panel nadal działa, a karta API pokazuje niedostępność.
+4. Uruchom API ponownie, wybierz „Sprawdź teraz” i sprawdź nowy wynik
+   oraz niezmieniony termin kolejnej automatycznej kontroli.
+
+To kroki odbioru do wykonania przez użytkownika, nie wynik testu przeglądarki.

@@ -23,3 +23,8 @@
 !docker/postgres/
 !docker/postgres/Dockerfile
 !docker/postgres/10-app-role.sh
+!apps/web/monitor.html
+!docs/
+!docs/ui/
+!docs/ui/shared/
+!docs/ui/shared/tokens.css
