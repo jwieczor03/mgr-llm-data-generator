@@ -52,6 +52,8 @@ oraz `services/validation-service/`.
 | `generation-service` | `services/generation-service/src/generation_service/bootstrap.py` | `services/generation-service/tests/test_health.py` |
 | `validation-service` | `services/validation-service/src/validation_service/bootstrap.py` | `services/validation-service/tests/test_health.py` |
 
+S1-T6 dostarcza rzeczywiste płaskie moduły [identity.py](../../services/application-api/src/application_api/identity.py) i [access.py](../../services/application-api/src/application_api/access.py) oraz składanie w [bootstrap.py](../../services/application-api/src/application_api/bootstrap.py); szczegóły w [rejestrze](../ustalenia_architektoniczne.md#kontekst-właściciela-i-polityka-dostępu--s1-t6). Pokazane niżej `adapters/identity/` pozostaje propozycją układu.
+
 Nie tworzymy pustych warstw domeny i adapterów. Dodamy je przy
 rzeczywistych funkcjach. Pozostałe elementy poniższego docelowego drzewa
 nadal są propozycją; nie należy tworzyć całego drzewa w S1-T1.

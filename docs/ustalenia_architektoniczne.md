@@ -83,6 +83,36 @@ Polecenie zapisania ustaleń nie oznacza przyjęcia nieomówionej reprezentacji 
 | Wybór kandydata | Uzgodnione 14 listopada 2026: zwracamy wyłącznie najnowszego użytecznego kandydata bieżącego wykonania, także przy pobieraniu po przerwaniu (REQ-039, AC-36; OD-03 zamknięte). Nie porównujemy liczby ani wag dodatkowych naruszeń i nie wymagamy archiwum starszych wersji. |
 | Pobieranie po przerwaniu | Uzgodnione 14 listopada 2026: wcześniej zapisany użyteczny kandydat i jego raport są dostępne także po anulowaniu lub błędzie (REQ-047, AC-35). Nie zmieniamy statusu wykonania ani nie wznawiamy procesu. Dostępność niesprawdzonych lub częściowych artefaktów nadal jest otwarta. |
 
+## Kontekst właściciela i polityka dostępu — S1-T6
+
+**Decyzja architekta w procesie delivery-orchestrator, 17 listopada 2026:**
+Dla zadania [#21](https://github.com/jwieczor03/mgr-llm-data-generator/issues/21)
+przyjęto minimalną wymienną granicę, aby przyszła integracja tożsamości
+nie wymagała przenoszenia szczegółów logowania do logiki zasobów.
+
+- Niemutowalny `ActorContext` przechowuje `subject`: niepusty tekst,
+  bez normalizacji. Pusty, zawierający tylko białe znaki i nietekstowy
+  identyfikator są odrzucane.
+- Synchroniczny `ActorContextProvider.get_context()` zwraca kontekst albo
+  `None`. Lokalny adapter zwraca stały `local-owner`, określony w adapterze,
+  nie z konfiguracji, żądania ani odpowiedzi modelu. Nie uwierzytelnia on
+  przeglądarki.
+- `AccessPolicy.require_owner(actor, owner_subject)` dopuszcza wyłącznie
+  dokładną zgodność. Obcy lub brakujący/pusty właściciel daje `AccessDenied`,
+  brak kontekstu `ActorContextUnavailable`. Właściciel ma docelowo pochodzić
+  z zaufanych metadanych; referencja artefaktu nie jest uprawnieniem.
+- Każda instancja aplikacji składa własny adapter i politykę, możliwe do
+  podmiany. Zależność FastAPI zamienia `None` i jawny błąd niedostępności
+  na HTTP 503 z kodem `actor_context_unavailable`, bez szczegółów źródła.
+  Błędy podmienionego źródła nie uruchamiają lokalnego mechanizmu awaryjnego.
+  Mapowanie `AccessDenied` należy do story konkretnego zasobu; nie ustalono
+  wspólnej odpowiedzi 403 ani 404. Diagnostyka nie wymaga kontekstu.
+
+Kontrakty są w płaskich modułach `application_api/identity.py` i `access.py`,
+bez zależności od FastAPI; ich składanie znajduje się w `bootstrap.py`.
+To fundament, nie kontrola dostępu do istniejących zasobów, pełna realizacja
+AC-28 ani zabezpieczenie hostingu. Logowanie i integracje pozostają przyszłą pracą.
+
 ## 3. Zapisane kierunki technologiczne
 
 **API projektów — uzgodnienie S2-T1 z 14 listopada 2026:**

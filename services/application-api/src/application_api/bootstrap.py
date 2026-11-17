@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from application_api.access import AccessPolicy, OwnershipAccessPolicy
+from application_api.identity import (ActorContext, ActorContextProvider, ActorContextUnavailable,
+                                      LocalActorContextProvider)
 from application_api.artifact_store import LocalArtifactStore, UnconfiguredArtifactStore
 from application_api.config import load_config
 from application_api.database import Database
@@ -43,8 +46,30 @@ def artifacts_health(request: Request) -> dict:
     return request.app.state.artifacts.report()
 
 
-def create_app(frontend_directory: Path = FRONTEND_DIRECTORY) -> FastAPI:
+def require_actor_context(request: Request) -> ActorContext:
+    try:
+        actor = request.app.state.actor_context_provider.get_context()
+        if actor is None:
+            raise ActorContextUnavailable()
+        return actor
+    except ActorContextUnavailable:
+        raise HTTPException(status_code=503, detail={"code": "actor_context_unavailable"}) from None
+
+
+def get_access_policy(request: Request) -> AccessPolicy:
+    return request.app.state.access_policy
+
+
+def create_app(
+    frontend_directory: Path = FRONTEND_DIRECTORY,
+    *,
+    actor_context_provider: ActorContextProvider | None = None,
+    access_policy: AccessPolicy | None = None,
+) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.state.actor_context_provider = (LocalActorContextProvider() if actor_context_provider is None
+                                        else actor_context_provider)
+    app.state.access_policy = OwnershipAccessPolicy() if access_policy is None else access_policy
     app.add_api_route("/health/live", live, methods=["GET"])
     app.add_api_route("/health/config", config, methods=["GET"])
     app.add_api_route("/health/database", database_health, methods=["GET"])
