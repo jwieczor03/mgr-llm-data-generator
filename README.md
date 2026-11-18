@@ -335,6 +335,23 @@ npm run dev --prefix apps/web
 
 Otwórz `http://127.0.0.1:5173/`. Każdy backend pod `/health/live` zwraca `{"status":"ok"}`; ten adres na porcie 5173 przechodzi przez proxy do `application-api`. Nieistniejący `/api/v1/nieznany` zwraca 404 jako JSON, a nieistniejąca strona i plik — 404. Procesy zatrzymuje się przez Ctrl+C. Endpoint potwierdza działanie procesu, a nie gotowość funkcji biznesowych.
 
+### Projekty przez API
+
+Po skonfigurowaniu i uruchomieniu `application-api` oraz PostgreSQL można
+utworzyć i odczytać projekt bez DDL. Zastąp identyfikator wartością `id`
+z odpowiedzi. Nazwa jest globalnie unikalna po usunięciu brzegowych białych
+znaków i porównaniu bez rozróżniania wielkości liter.
+
+```sh
+curl -i -X POST http://127.0.0.1:8000/api/v1/projects -H 'Content-Type: application/json' -d '{"name":"Bank","description":"Dane testowe"}'
+curl -i http://127.0.0.1:8000/api/v1/projects
+curl -i http://127.0.0.1:8000/api/v1/projects/IDENTYFIKATOR
+curl -i -X POST http://127.0.0.1:8000/api/v1/projects -H 'Content-Type: application/json' -d '{"name":" bank "}'
+```
+
+Ostatnie żądanie zwraca 409. Po restarcie backendu ponów odczyt projektu;
+dane pozostają w bazie. Interfejs projektów należy do S2-T6.
+
 ## Konfiguracja backendów
 
 Każdy backend ma własny plik `.env` w `services/<nazwa-serwisu>`. Skopiuj

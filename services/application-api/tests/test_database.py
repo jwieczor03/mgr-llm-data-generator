@@ -10,50 +10,13 @@ from pathlib import Path
 import pytest
 from application_api.bootstrap import create_app
 from application_api.config import Settings, require_capabilities
-from application_api.database import MIGRATION_LOCK_KEY, MIGRATIONS, Database
+from application_api.database import MIGRATION_LOCK_KEY, Database
+from conftest import PASSWORD, docker
 from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 pytestmark = [pytest.mark.integration, pytest.mark.skipif(os.getenv("RUN_DATABASE_TESTS") != "1", reason="wymaga izolowanego Docker PostgreSQL")]
-PASSWORD = "test:@/%$' secret"
-
-
-def docker(*args):
-    return subprocess.run(["docker", *args], check=True, capture_output=True, text=True)
-
-
-@pytest.fixture(scope="module")
-def postgres():
-    name = "s1t4-" + uuid.uuid4().hex[:12]
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    docker("run", "-d", "--name", name, "-p", f"127.0.0.1:{port}:5432", "-e", "POSTGRES_PASSWORD=admin-test", "-e", "POSTGRES_DB=testdb", "postgres:18.7-bookworm")
-    try:
-        for _ in range(100):
-            if subprocess.run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "testdb"], capture_output=True).returncode == 0:
-                break
-            time.sleep(.2)
-        else:
-            pytest.fail("PostgreSQL nie wystartował")
-        sql = "CREATE ROLE app_user LOGIN PASSWORD 'test:@/%$'' secret' NOSUPERUSER NOCREATEDB NOCREATEROLE; CREATE SCHEMA app AUTHORIZATION app_user;"
-        docker("exec", name, "psql", "-U", "postgres", "-d", "testdb", "-v", "ON_ERROR_STOP=1", "-c", sql)
-        yield name, port
-    finally:
-        docker("rm", "-fv", name)
-
-
-@pytest.fixture
-def db(postgres, tmp_path):
-    _, port = postgres
-    migrations = tmp_path / "migrations"
-    shutil.copytree(MIGRATIONS, migrations, ignore=shutil.ignore_patterns("__pycache__"))
-    settings = Settings(_env_file=None, app_db_host="127.0.0.1", app_db_port=str(port), app_db_name="testdb", app_db_user="app_user", app_db_password=PASSWORD)
-    database = Database(settings, {"blocked_capabilities": []}, migrations)
-    docker("exec", postgres[0], "psql", "-U", "postgres", "-d", "testdb", "-v", "ON_ERROR_STOP=1", "-c", "DROP SCHEMA app CASCADE; CREATE SCHEMA app AUTHORIZATION app_user")
-    yield database
-    database.close()
 
 
 def test_start_restart_health_and_guard(db):
@@ -80,8 +43,8 @@ def test_start_restart_health_and_guard(db):
 
 
 def test_failed_migration_rolls_back_and_does_not_retry(db):
-    revision = db.migrations / "versions" / "0002_test.py"
-    revision.write_text('from alembic import op\nrevision="0002_test"\ndown_revision="0001_initial"\nbranch_labels=None\ndepends_on=None\ndef upgrade():\n op.execute("CREATE TABLE app.test_only (id int)")\n op.execute("SELECT 1/0")\n')
+    revision = db.migrations / "versions" / "0003_test.py"
+    revision.write_text('from alembic import op\nrevision="0003_test"\ndown_revision="0002_projects"\nbranch_labels=None\ndepends_on=None\ndef upgrade():\n op.execute("CREATE TABLE app.test_only (id int)")\n op.execute("SELECT 1/0")\n')
     db.start()
     assert db.report()["issues"][0]["code"] == "migration_failed"
     with db.engine.connect() as conn:
