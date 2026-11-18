@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from sqlalchemy import Column, DateTime, MetaData, Table, Text, Uuid, insert, select
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeout
+from starlette.exceptions import HTTPException
 
 from application_api.access import AccessDenied
 from application_api.identity import ActorContextUnavailable
@@ -46,6 +47,12 @@ class ProjectOutput(BaseModel):
     description: str | None
     created_at: datetime
 
+    @field_validator("created_at")
+    @classmethod
+    def as_utc(cls, value):
+        # PostgreSQL returns timestamptz in the session timezone, not necessarily UTC.
+        return value.astimezone(timezone.utc)
+
 
 class ProjectList(BaseModel):
     items: list[ProjectOutput]
@@ -80,6 +87,12 @@ class ProjectRoute(APIRoute):
                     field = "body" if error["type"] in ("json_invalid", "model_attributes_type") or len(loc) == 1 else str(loc[-1])
                     fields.append({"field": field, "message": "Nieprawidłowa wartość."})
                 return error_response(request_id, 422, "VALIDATION_ERROR", "Nieprawidłowe dane żądania.", fields)
+            except HTTPException as exc:
+                # FastAPI wraps invalid JSON byte encoding in an HTTP 400 during parsing.
+                if exc.status_code == 400 and isinstance(exc.__cause__, UnicodeDecodeError):
+                    return error_response(request_id, 422, "VALIDATION_ERROR", "Nieprawidłowe dane żądania.",
+                                          [{"field": "body", "message": "Nieprawidłowa wartość."}])
+                return error_response(request_id, 500, "INTERNAL_ERROR", "Nie udało się wykonać operacji.")
             except ProjectError as exc:
                 return error_response(request_id, exc.status, exc.code, exc.message, exc.fields)
             except ActorContextUnavailable:

@@ -87,3 +87,9 @@ def test_database_errors_do_not_leak_or_fake_conflict(client):
     assert_error(client.post("/api/v1/projects", json={"name": "a"}), 503, "database_unavailable")
     client.app.state.database.session = lambda: fail(IntegrityError("secret SELECT", {}, Exception("secret")))
     assert_error(client.post("/api/v1/projects", json={"name": "a"}), 500, "INTERNAL_ERROR")
+
+
+def test_invalid_utf8_json_is_validation_error(client):
+    response = client.post("/api/v1/projects", content=b'{"name":"\xff"}',
+                           headers={"Content-Type": "application/json"})
+    assert_error(response, 422, "VALIDATION_ERROR", "body")

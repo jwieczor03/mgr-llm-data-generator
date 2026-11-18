@@ -84,3 +84,27 @@ def test_database_constraints_and_rollback(client, db):
             session.execute(statement, base | changes)
     with db.session() as session:
         assert session.execute(text("SELECT count(*) FROM app.projects")).scalar_one() == 0
+
+
+def test_project_timestamps_are_utc_when_database_uses_other_timezone(client, db, postgres):
+    from conftest import docker
+
+    docker("exec", postgres[0], "psql", "-U", "postgres", "-d", "testdb", "-v", "ON_ERROR_STOP=1",
+           "-c", "ALTER DATABASE testdb SET timezone TO 'Europe/Warsaw'")
+    db.engine.dispose()
+    try:
+        with db.engine.connect() as connection:
+            assert connection.execute(text("SHOW timezone")).scalar_one() == "Europe/Warsaw"
+        created = client.post("/api/v1/projects", json={"name": "Strefa"})
+        assert created.status_code == 201
+        project = created.json()
+        assert project["created_at"].endswith("Z")
+        fetched = client.get("/api/v1/projects/" + project["id"])
+        listed = client.get("/api/v1/projects")
+        assert fetched.status_code == listed.status_code == 200
+        assert fetched.json() == project
+        assert listed.json()["items"] == [project]
+    finally:
+        db.engine.dispose()
+        docker("exec", postgres[0], "psql", "-U", "postgres", "-d", "testdb", "-v", "ON_ERROR_STOP=1",
+               "-c", "ALTER DATABASE testdb RESET timezone")
