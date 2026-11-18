@@ -248,3 +248,25 @@ def test_independent_monitor_after_api_stops(stack: Stack):
         assert services["validation-service"]["capacity"] == "capable"
     finally:
         stack.run("up", "-d", "--wait", "application-api")
+
+
+def test_projects_http_survive_backend_restart(stack: Stack):
+    from urllib.error import HTTPError
+    from urllib.request import Request
+
+    address = stack.run("port", "application-api", "8000")
+    base = f"http://{address}/api/v1/projects"
+    request = Request(base, data=json.dumps({"name": "Projekt HTTP", "description": " test "}).encode(),
+                      headers={"Content-Type": "application/json"}, method="POST")
+    with urlopen(request, timeout=10) as response:
+        assert response.status == 201
+        project = json.load(response)
+        assert response.headers["X-Request-ID"]
+    assert project["description"] == "test"
+    with pytest.raises(HTTPError) as conflict:
+        urlopen(Request(base, data=b'{"name":" projekt http "}', headers={"Content-Type": "application/json"}, method="POST"), timeout=10)
+    assert conflict.value.code == 409
+    assert json.loads(conflict.value.read())["error"]["code"] == "PROJECT_NAME_CONFLICT"
+    assert project in json.loads(stack.get("/api/v1/projects")[2])["items"]
+    stack.run("up", "-d", "--force-recreate", "--no-deps", "--wait", "application-api")
+    assert json.loads(stack.get("/api/v1/projects/" + project["id"])[2]) == project

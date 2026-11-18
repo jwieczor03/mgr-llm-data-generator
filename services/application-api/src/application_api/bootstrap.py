@@ -19,6 +19,7 @@ from application_api.identity import (
     ActorContextUnavailable,
     LocalActorContextProvider,
 )
+from application_api.projects import router as projects_router
 
 
 @asynccontextmanager
@@ -122,6 +123,7 @@ def create_app(
     app.state.actor_context_provider = (LocalActorContextProvider() if actor_context_provider is None
                                         else actor_context_provider)
     app.state.access_policy = OwnershipAccessPolicy() if access_policy is None else access_policy
+    app.include_router(projects_router)
     app.add_api_route("/health/live", live, methods=["GET"])
     app.add_api_route("/health/ready", ready, methods=["GET"])
     app.add_api_route("/health/config", config, methods=["GET"])

@@ -18,7 +18,7 @@ def main():
         env = os.environ.copy()
         env.update(RUN_DATABASE_TESTS="1", RUN_COMPOSE_TESTS="1")
         run(["docker", "info"], env=env)
-        run(["uv", "run", "--locked", "--no-sync", "pytest", "tests/test_database.py"], ROOT / "services/application-api", env)
+        run(["uv", "run", "--locked", "--no-sync", "pytest", "-m", "integration", "tests"], ROOT / "services/application-api", env)
         run(["uv", "run", "--locked", "--no-sync", "pytest", "-c", "pyproject.toml", "../../tests/integration/test_compose.py"], ROOT / "services/application-api", env)
     elif not sys.argv[1:]:
         # Check all Python sources and tests using the shared root configuration.

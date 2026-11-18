@@ -44,7 +44,7 @@ Diagram pomija techniczne klucze złożone i kilka referencji. Nie oznacza, że 
 
 | Tabela | Najważniejsze kolumny | Niezmienniki |
 | --- | --- | --- |
-| `projects` | `id`, `owner_subject text`, `name`, `description`, `version`, `created_at` | Uzgodnione 14 listopada 2026 w S2-T1: nazwa wymagana, 1–100 znaków; opis opcjonalny, do 2000 znaków; bez zamkniętej listy dziedzin. Walidacja i zapis po usunięciu brzegowych białych znaków; pusta nazwa jest błędem, pusty opis oznacza brak opisu; przekroczenie limitu odrzucamy bez obcinania treści. Nazwy są unikalne w instalacji bez rozróżniania wielkości liter; duplikat odrzucamy bez nadpisania projektu. Realizacja ograniczenia w bazie pozostaje otwarta. Pozostały model jest propozycją: lokalny `owner_subject` ze zaufanego adaptera, nie z body żądania; bez tabeli kont w MVP. |
+| `projects` | `id`, `owner_subject`, `name`, `name_key`, `description`, `created_at` | Uzgodnione 14 listopada 2026 w S2-T1: nazwa wymagana, 1–100 znaków; opis opcjonalny, do 2000 znaków; bez zamkniętej listy dziedzin. Walidacja i zapis po usunięciu brzegowych białych znaków; pusta nazwa jest błędem, pusty opis oznacza brak opisu; przekroczenie limitu odrzucamy bez obcinania treści. Nazwy są unikalne w instalacji bez rozróżniania wielkości liter; duplikat odrzucamy bez nadpisania projektu. Migracja `0002_projects` tworzy globalne ograniczenie `UNIQUE(name_key)`. Właściciel pochodzi ze zaufanego kontekstu, nie z body; bez tabeli kont w MVP. |
 | `schema_versions` | `id`, `project_id`, `revision_no`, `ddl_artifact_id`, `ddl_sha256`, `created_at` | `UNIQUE(project_id, revision_no)`; DDL i hash niezmienne. |
 | `schema_interpretations` | `id`, `project_id`, `schema_version_id`, `revision_no`, `model_artifact_id`, `analysis_profile`, `diagnostics jsonb`, `approval_state` | Wiąże dokładne DDL z wersją rozpoznania i zatwierdzonymi uzupełnieniami. Po zatwierdzeniu nowa interpretacja oznacza nowy wiersz. |
 | `rule_revisions` | `id`, `project_id`, `rule_key`, `revision_no`, `source_text`, `kind`, `definition jsonb`, `definition_sha256`, `approval_state`, `approved_at` | `UNIQUE(project_id, rule_key, revision_no)`; `kind` odróżnia regułę sprawdzalną, jakościową i nierozstrzygniętą. Zatwierdzona treść nie jest nadpisywana. |
@@ -246,8 +246,7 @@ i wyniku przeglądu pozostaje do wyjaśnienia.
 **Unikalność nazw — uzgodnienie S2-T1 z 14 listopada 2026:** nazwy są
 unikalne w danej instalacji bez rozróżniania wielkości liter, po usunięciu
 brzegowych białych znaków. Próba utworzenia duplikatu zwraca czytelny
-błąd i nie nadpisuje projektu. Techniczna realizacja porównania i ograniczenia w bazie pozostaje
-do uzgodnienia.
+błąd i nie nadpisuje projektu. Klucz nazwy wyznacza backend jako `strip().casefold()` bez dodatkowej normalizacji Unicode; PostgreSQL wymusza jego globalną unikalność. Przed zmianą wersji Unicode Pythona należy sprawdzić istniejące klucze i kolizje.
 
 **Uzgodnienie S2-T1 — 14 listopada 2026:** projekt można utworzyć
 i trwale zapisać przed dodaniem pierwszej wersji DDL. Brak wersji

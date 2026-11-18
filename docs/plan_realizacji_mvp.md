@@ -961,9 +961,7 @@ opisu zadania. Nie pozostawiamy tych wyborów juniorowi.
 
 #### S2-T1 — Dodać zapis i odczyt projektów w backendzie
 
-**Status opisu:** szkic częściowo uzgodniony, **do wyjaśnienia** przed
-przekazaniem do implementacji. Zatwierdzono podział i opisane poniżej
-zachowania; otwarte szczegóły wymieniono na końcu.
+**Status:** implementacja S2-T1 przygotowana; niezależne review i ręczny odbiór pozostają osobnymi krokami. Źródłem szczegółów jest [issue #25](https://github.com/jwieczor03/mgr-llm-data-generator/issues/25).
 
 **Story nadrzędne:** S2 — Zapisane projekty i rozpoznawanie schematu.
 **Cel:** użytkownik tworzy zapisany projekt i później odczytuje go bez
@@ -971,16 +969,12 @@ ponownego przygotowywania jego nazwy i opisu.
 **Źródło:** REQ-009, projektowa część AC-01 i AC-40, sekcja 5.1
 specyfikacji oraz uzgodniony zakres projektów w kontraktach API.
 
-**Punkt startowy:** uzgodniony katalog `services/application-api/`
-jest do utworzenia w S1-T1; nie jest istniejącym modułem aplikacji.
-Model projektu opisano w sekcji 3 modelu danych LLD, a operacje
-w części „Projekty — uzgodniony zakres S2-T1” kontraktów API.
-Wewnętrznych nazw plików i klas nie zatwierdzono.
+**Punkt startowy:** fundament S1 dostarcza bazę, migracje i kontekst właściciela. Model projektu i kontrakt API opisano w LLD.
 **Zależności:** szkielet S1-T1, konfiguracja S1-T2, baza i mechanizm
 migracji S1-T4, uzgodniony kontekst dostępu S1-T6 oraz narzędzia testów
 z S1-T7. Wspólnej infrastruktury nie tworzymy ponownie w tym zadaniu.
 
-**Co należy zrobić po rozstrzygnięciu otwartych szczegółów:**
+**Zakres zadania:**
 1. Dodać trwały zapis projektów w bazie aplikacji i potrzebną migrację.
    Utworzenie projektu nie wymaga DDL ani nie oznacza gotowości do generowania.
 2. Dodać `POST /api/v1/projects` z wymaganą nazwą i opcjonalnym opisem.
@@ -1032,18 +1026,9 @@ reguły i relacje, usuwanie lub edycja projektu, konta oraz historia czatów.
   `details.fields` z polem `name`, a `404` ma pustą listę pól.
   Odpowiedź nie ujawnia szczegółów bazy ani zapytań SQL.
 - Przykłady projektów obejmują różne dziedziny, bez listy dozwolonych branż.
-  Testy automatyczne należą do tego zadania; nie zostały wykonane.
+  Testy automatyczne należą do tego zadania.
 
-**Ręczna weryfikacja:** przez klienta API utworzyć projekt, odczytać
-go i listę, sprawdzić konflikt nazwy, następnie zrestartować backend
-i ponowić odczyt. Komendy uruchomienia i testów uzupełnimy po konfiguracji
-S1; obecnie nie ma sprawdzonych komend aplikacji. Odbiór przez przeglądarkę
-będzie możliwy po S2-T6.
-
-**Do wyjaśnienia:** szczegóły porównywania nazw i gwarancji
-unikalności w bazie, kontrakt dostępu z S1-T6, wewnętrzna struktura
-modułu oraz zależności i komendy testowe z S1. Nie wybrano wersji UUID.
-Nie utworzono dodatkowych podzadań ani issue na GitHubie.
+**Ręczna weryfikacja:** utworzyć projekt, odczytać go i listę, sprawdzić konflikt nazwy, zrestartować backend i ponowić odczyt. Przykładowe polecenia znajdują się w README. Odbiór w przeglądarce będzie możliwy po S2-T6.
 
 #### S2-T2 — Dodać wgrywanie i przechowywanie pełnych wersji DDL
 

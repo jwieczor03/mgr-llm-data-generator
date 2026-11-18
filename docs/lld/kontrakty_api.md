@@ -161,14 +161,25 @@ operacji z uzgodnionym kontekstem dostępu z S1-T6.
 Wspólny kształt błędu powyżej zatwierdzono dla opisanych niżej
 błędów projektów, nie dla wszystkich pozostałych operacji aplikacji.
 
+**Realizacja S2-T1:** backend nadaje UUID v4 i czas UTC, filtruje listę po
+właścicielu i odpowiada 404 także dla obcego projektu. Klucz nazwy powstaje
+przez `strip().casefold()` bez dodatkowej normalizacji Unicode i jest globalnie
+unikalny w PostgreSQL. Odpowiedź zawiera wyłącznie cztery pola projektu.
+Każde żądanie otrzymuje nowy `X-Request-ID`, również przy sukcesie. Błędny
+JSON lub body inne niż obiekt wskazuje `body`, NUL wskazuje właściwe pole.
+Brak kontekstu zwraca `503 actor_context_unavailable`, brak konfiguracji bazy
+`503 configuration_unavailable`, a niedostępna baza lub migracja
+`503 database_unavailable`. Nieoczekiwany błąd zwraca bezpieczne
+`500 INTERNAL_ERROR`; te odpowiedzi mają tę samą strukturę błędu i pustą
+listę pól. Klient nie ponawia automatycznie utworzenia projektu.
+
 **Uzgodnione 14 listopada 2026 — format pól technicznych:** `id` jako tekstowy
 UUID, `created_at` jako tekst daty i czasu w formacie ISO 8601 w UTC,
 z końcówką `Z`. Obie wartości nadaje backend; klient nie wybiera ich
-przy tworzeniu projektu. Nie wybrano przez to konkretnej wersji UUID
-ani biblioteki generującej identyfikatory.
+przy tworzeniu projektu. Decyzja techniczna z 18 listopada wybiera UUID v4 generowany przez bibliotekę standardową Pythona.
 
 **Uzgodnione 14 listopada 2026 — lista projektów:** `GET /api/v1/projects`
-zwraca `{"items": [...]}` ze wszystkimi zapisanymi projektami, bez
+zwraca `{"items": [...]}` ze wszystkimi projektami bieżącego właściciela, bez
 podziału na strony w MVP. Każdy element ma zatwierdzone pola obiektu
 projektu. Sortowanie: `created_at` malejąco, a przy identycznym czasie
 `id` rosnąco. Brak projektów daje `200` i `{"items": []}`, nie błąd.
