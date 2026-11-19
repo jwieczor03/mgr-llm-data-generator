@@ -48,6 +48,49 @@ def test_contract_and_isolation(store):
         store.get(a)
 
 
+def test_put_at_is_idempotent_and_cleanup_removes_interrupted_temp(store, tmp_path):
+    ref = ArtifactRef('project', str(uuid.uuid4()))
+    assert store.put_at(ref, b'original') == ref
+    assert store.put_at(ref, b'original') == ref
+    with pytest.raises(ArtifactError, match='conflict'):
+        store.put_at(ref, b'different')
+    assert store.get(ref) == b'original'
+    interrupted = tmp_path / 'project' / f'.tmp-{ref.id}-{uuid.uuid4()}'
+    interrupted.write_bytes(b'partial')
+    assert store.delete(ref)
+    assert not interrupted.exists()
+    assert not store.delete(ref)
+
+
+def test_put_at_rejects_existing_symlink(store, tmp_path):
+    ref = ArtifactRef('project', str(uuid.uuid4()))
+    outside = tmp_path / 'outside'
+    outside.write_bytes(b'secret')
+    (tmp_path / 'project' / ref.id).symlink_to(outside)
+    with pytest.raises(ArtifactError, match='invalid_resource'):
+        store.put_at(ref, b'secret')
+    assert outside.read_bytes() == b'secret'
+
+
+def test_put_at_reports_failed_temp_cleanup_and_delete_can_recover(store, tmp_path, monkeypatch):
+    ref = ArtifactRef('project', str(uuid.uuid4()))
+    original = os.unlink
+
+    def fail_temp(path, *args, **kwargs):
+        if str(path).startswith(f'.tmp-{ref.id}-'):
+            raise OSError(errno.EIO, 'private')
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, 'unlink', fail_temp)
+    with pytest.raises(ArtifactError, match='io_error'):
+        store.put_at(ref, b'data')
+    assert store.get(ref) == b'data'
+    assert len(list((tmp_path / 'project').iterdir())) == 2
+    monkeypatch.setattr(os, 'unlink', original)
+    assert store.delete(ref)
+    assert list((tmp_path / 'project').iterdir()) == []
+
+
 @pytest.mark.parametrize('ref', [ArtifactRef('project', '../x'), ArtifactRef('project', '/tmp/x'),
                                  ArtifactRef('other', str(uuid.uuid4())), ArtifactRef('working', str(uuid.uuid1()))])
 def test_invalid_references(store, ref):

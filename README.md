@@ -70,6 +70,48 @@ oraz niezależny monitor z panelem diagnostycznym.
 T1–T3 dostarczają szkielety, konfigurację i lokalne uruchomienie.
 Status poszczególnych zadań opisano w planie. S1-T8 jest w realizacji.
 
+### Przyjęcie plików DDL — S2-T2
+
+API zapisuje uporządkowaną paczkę oryginalnych plików SQL w istniejącym
+projekcie. Wysyłanie wymaga rezerwacji i dodatkowego potwierdzenia odbioru;
+status można sprawdzać bez ponownego przesyłania. Jedna operacja DDL zajmuje
+wspólny slot aplikacji aż do jej zakończenia lub posprzątania.
+
+**Ograniczenie:** parser i ocena obsługiwalności należą do S2-T3/T4 i nie są
+jeszcze zaimplementowane. Po ACK bieżący worker zgłasza
+`DDL_ANALYZER_UNAVAILABLE`; po czterech uruchomieniach kończy jako
+`FAILED_TECHNICAL`. Przyjęta wersja i oryginały pozostają dostępne, ale nie
+powstaje poprawna analiza ani nowa wersja domyślna. Interfejs przesyłania
+w przeglądarce należy do S2-T6.
+
+Opcjonalne ustawienia `application-api` to `DDL_MAX_FILES` (domyślnie 1024),
+`DDL_MAX_TOTAL_BYTES` i `DDL_MAX_FILE_BYTES` (oba 67108864),
+`DDL_WORKER_TIMEOUT_SECONDS` (120) oraz `DDL_RUNTIME_ROOT` (w Compose osobny
+wolumen tylko API). Przed ACK karta odnawia dzierżawę co 15 sekund; brak
+odnowienia lub postępu przez 120 sekund zamyka próbę. Po ACK karta nie jest
+potrzebna do analizy. Błędy kodowania UTF-8, puste pliki i powtórzone nazwy
+odrzucają całą paczkę przed utworzeniem wersji.
+
+Ręczna kontrola API po uruchomieniu Compose:
+
+1. Utwórz projekt przez `POST /api/v1/projects` z JSON `{"name":"Próba DDL"}`
+   i zapisz otrzymane `id`. Utwórz osobne identyfikatory UUID v4 próby i strony.
+2. W `PUT /api/v1/projects/{id}/ddl-attempts/{attempt_id}` prześlij JSON
+   `{"page_id":"UUID-strony","files":[{"name":"schema.sql","size_bytes":N}]}`,
+   gdzie `N` to rzeczywista liczba bajtów pliku. Oczekuj 201.
+3. Wyślij plik przez `POST` pod ten sam adres z `/files`, jako multipart pole
+   `files`, z nagłówkiem `X-DDL-Page-ID: UUID-strony`. Oczekuj 201 i `STAGED`.
+   `GET` adresu próby z tym nagłówkiem zwraca ten sam stan i `receipt_nonce`.
+4. Wyślij `POST .../receipt` z JSON `{"page_id":"UUID-strony",
+   "receipt_nonce":"wartość-z-STAGED"}`. Oczekuj 202 i identyfikatora wersji.
+   Powtórzenie tego ACK zwraca ten sam identyfikator. Późniejszy `GET` próby
+   nie wymaga nagłówka strony i po ponowieniach pokaże `FAILED_TECHNICAL`.
+5. `GET .../schema-versions` pokazuje wersję i jej manifest. Przez
+   `GET .../schema-versions/{version_id}/files/{file_id}` pobierz oryginalne
+   bajty; `/analysis` zwraca 409, ponieważ T3/T4 jeszcze nie dostarczono.
+   Osobna próba `POST .../cancel` wymaga `page_id` przed ACK; po skutecznym
+   sprzątaniu ma stan `CANCELLED` i nie tworzy wersji.
+
 ### Zadania S3 do późniejszego przeniesienia na GitHub
 
 [Pakiet S3 w planie realizacji](docs/plan_realizacji_mvp.md#s3--pakiet-do-późniejszego-przeniesienia-na-github)

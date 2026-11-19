@@ -23,6 +23,7 @@ class ArtifactError(Exception):
 
 class ArtifactStore(Protocol):
     def put(self, namespace: Namespace, content: bytes) -> ArtifactRef: ...
+    def put_at(self, ref: ArtifactRef, content: bytes) -> ArtifactRef: ...
     def get(self, ref: ArtifactRef) -> bytes: ...
     def delete(self, ref: ArtifactRef) -> bool: ...
 
@@ -105,17 +106,56 @@ class LocalArtifactStore:
         finally:
             os.close(root)
 
+    def put_at(self, ref: ArtifactRef, content: bytes) -> ArtifactRef:
+        """Publish at a journalled reference; callers serialize writes and cleanup."""
+        _validate(ref)
+        root = self._root(ref.namespace)
+        temp = f".tmp-{ref.id}-{uuid.uuid4()}"
+        created = False
+        try:
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=root)
+            created = True
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temp, ref.id, src_dir_fd=root, dst_dir_fd=root, follow_symlinks=False)
+                os.fsync(root)
+            except FileExistsError:
+                # Existing bytes must be identical; a retry must never overwrite them.
+                if self.get(ref) != content:
+                    raise ArtifactError("conflict") from None
+            return ref
+        except OSError as exc:
+            raise _error(exc) from None
+        finally:
+            cleanup_error = None
+            if created:
+                try:
+                    os.unlink(temp, dir_fd=root)
+                except OSError as exc:
+                    cleanup_error = _error(exc)
+            os.close(root)
+            if cleanup_error:
+                raise cleanup_error
+
     def delete(self, ref: ArtifactRef) -> bool:
         _validate(ref)
         root = self._root(ref.namespace)
         try:
-            info = os.stat(ref.id, dir_fd=root, follow_symlinks=False)
-            if not stat.S_ISREG(info.st_mode):
-                raise ArtifactError("invalid_resource")
-            os.unlink(ref.id, dir_fd=root)
-            return True
-        except FileNotFoundError:
-            return False
+            removed = False
+            names = [ref.id, *(name for name in os.listdir(root) if name.startswith(f".tmp-{ref.id}-"))]
+            for name in names:
+                try:
+                    info = os.stat(name, dir_fd=root, follow_symlinks=False)
+                    if not stat.S_ISREG(info.st_mode):
+                        raise ArtifactError("invalid_resource")
+                    os.unlink(name, dir_fd=root)
+                    removed = True
+                except FileNotFoundError:
+                    continue
+            return removed
         except OSError as exc:
             raise _error(exc) from None
         finally:

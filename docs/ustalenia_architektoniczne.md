@@ -158,6 +158,109 @@ z jednej reguły backendu. Kosztem jest przechowywanie dodatkowego klucza.
 Przed zmianą wersji Unicode Pythona należy sprawdzić zgodność zapisanych
 kluczy i możliwe kolizje; ich przeliczenie wymaga migracji.
 
+### S2-T2 — granica analizy i ochrona zapisu, 18 listopada 2026
+
+**Ustalone technicznie przez architekta w procesie delivery-orchestrator.**
+Podstawą jest aktualny [opis S2-T2, issue #26](https://github.com/jwieczor03/mgr-llm-data-generator/issues/26)
+oraz [wspólne kontrakty S2, issue #8](https://github.com/jwieczor03/mgr-llm-data-generator/issues/8).
+Poniższe doprecyzowania dotyczą realizacji T2; nie zatwierdzają nowej
+logiki biznesowej ani nie potwierdzają wykonania testów.
+
+**Brak adaptera T3/T4.** T2 dostarcza rzeczywisty koordynator, izolowany
+podproces i port analizy, lecz nie implementuje parsera ani oceny
+obsługiwalności. Domyślne powiązanie portu, dopóki T3/T4 nie istnieje,
+zgłasza w workerze bezpieczny błąd techniczny `DDL_ANALYZER_UNAVAILABLE`.
+Obowiązuje zwykła polityka najwyżej czterech uruchomień z odstępami
+1, 5 i 15 sekund; potem `FAILED_TECHNICAL`. Przyjęta wersja i oryginały
+pozostają, wcześniejsza wersja domyślna się nie zmienia. Brak modułu
+nie oznacza błędnego DDL, pustego poprawnego modelu ani `SUCCEEDED`.
+Takie powiązanie umożliwia oddzielne dostarczenie infrastruktury T2.
+Pełny odbiór analizy prawdziwych schematów oraz jej pomiar wydajności
+wymaga późniejszej integracji T3/T4; pozostaje jej jawnym ograniczeniem.
+
+**Port i punkt kontrolny.** Zachowujemy wejście
+`DdlAnalyzer.analyze(bundle, profile)` oraz wynik `SchemaAnalysis`.
+Wewnętrzny adapter wykonuje dwa etapy: T3 zwraca kompletny model
+struktury, T4 ocenia ten model i tworzy końcowy dokument wraz
+z diagnostyką oraz `supported`. Ich porty to
+`DdlParser.parse(bundle, profile) -> ParsedSchema` oraz
+`DdlSupport.diagnose(parsed, profile) -> SchemaAnalysis`; `ParsedSchema`
+zawiera model struktury i diagnostykę T3, bez deklaracji końcowej
+obsługiwalności. Fasada `DdlAnalyzer` składa te etapy; zapis checkpointu
+i ewentualny odczyt poprzedniego punktu są zależnościami tej fasady,
+bez dodawania parametrów do publicznego `analyze(bundle, profile)`.
+Wewnętrzny protokół workera dopuszcza
+wiadomość `checkpoint` po T3 i wiadomość końcową `result`; nie zmienia
+publicznego dokumentu analizy. Checkpoint zawiera wersję kontraktu,
+identyfikator wersji DDL, hash uporządkowanego manifestu, dokładny profil
+adaptera i bibliotek, model T3 oraz SHA-256 jego jednoznacznej
+serializacji JSON (UTF-8, posortowane klucze, bez zbędnych odstępów).
+Koordynator zapisuje go warunkowo dla aktualnego epoch i stanu.
+Przy kolejnym uruchomieniu przekazuje go workerowi tylko po zgodności
+wszystkich tych danych; wtedy można rozpocząć T4. Niepełny lub niezgodny
+checkpoint oznacza ponowne T3, w dotychczasowym limicie uruchomień.
+Sam checkpoint nigdy nie jest udostępniany jako końcowa analiza ani
+wybierany jako schemat domyślny. Wybór implementacji pochodzi ze składu
+aplikacji, nie z treści uploadu lub dowolnej nazwy modułu w żądaniu.
+
+Koordynator waliduje także końcową kopertę workera: wersję kontraktu,
+identyfikator wersji DDL, hash manifestu i dokładny profil muszą pasować
+do uruchomienia; dokument musi spełniać schemat `SchemaAnalysis`.
+`supported=true` nie może współistnieć z diagnostyką błędu blokującego,
+a `supported=false` wymaga wyjaśniającej diagnostyki. Niezgodny lub
+niekompletny wynik jest błędem technicznym `DDL_WORKER_PROTOCOL_ERROR`,
+bez publikacji sukcesu. Po tej kontroli aktualny epoch, stan i własność
+slotu są ponownie warunkami jednej transakcji publikacji wyniku,
+zmiany wersji domyślnej i zlecenia wymaganego przeglądu reguł/relacji.
+
+**Powtórzony ACK.** Jawny losowy nonce jest dostępny tylko w `STAGED`
+i usuwany przy pierwszym poprawnym ACK. Zachowujemy jego SHA-256
+w technicznym zapisie próby, aby rozpoznać identyczne powtórzenie.
+Porównanie nadal wymaga właściwego właściciela, projektu, próby i strony;
+hash nie zastępuje kontroli dostępu. Poprawne powtórzenie zwraca istniejącą
+wersję bez nowego uruchomienia. Anulowana lub wygasła próba nie odzyskuje
+aktywności dzięki dawnemu nonce.
+
+**Nazwy i zbiorcza walidacja.** Rezerwacja przechowuje uporządkowaną surową
+listę nazw i rozmiarów jako JSON oraz jej hash. Nie nakładamy na nią
+unikalności nazw, która przerwałaby sprawdzanie pierwszego konfliktu.
+Po kompletnym odbiorze sprawdzamy razem kodowanie, puste pliki oraz
+casefold nazw. Dopiero zwalidowana paczka tworzy rekordy
+`ddl_attempt_files` z ograniczeniami unikalności próba+pozycja
+i próba+klucz nazwy. Referencja każdego publikowanego artefaktu jest
+zatwierdzana w dzienniku bazy przed `put_at`, jak wymaga opis T2.
+
+**Wyścig uploadu ze sprzątaniem.** Wszystkie publikacje `put_at` i kasowanie
+artefaktów T2 używają tej samej, stałej blokady `flock` pliku
+`ddl-io.lock` we wspólnym wolumenie `ddl-runtime`. To osobna blokada
+od `flock` życia workera. Pliku blokady nie usuwamy ani nie zastępujemy
+podczas pracy. Każdy zapis po uzyskaniu blokady ponownie sprawdza w bazie
+własność slotu, stan i epoch, następnie zatwierdza referencję i publikuje
+plik. Nie wystarcza sprawdzenie przed oczekiwaniem na blokadę.
+Anulowanie najpierw zapisuje `CANCELLING` i zmienia epoch w krótkiej
+transakcji. Dopiero po jej zakończeniu czeka na blokadę plikową oraz
+potwierdzenie zakończenia workera. Sprzątanie trzyma blokadę podczas
+kasowania i transakcji kończącej próbę oraz zwalniającej slot.
+Nie wolno czekać na `flock`, trzymając blokadę wiersza bazy.
+W ten sposób rozpoczęty wcześniej zapis albo skończy się przed kasowaniem,
+albo po uzyskaniu blokady zobaczy zamknięty stan i niczego nie zapisze.
+Nie trzeba utrzymywać blokady przez całe oczekiwanie na bajty z sieci.
+Handler transferu sprawdza anulowanie między porcjami danych i zamyka
+własne zasoby tymczasowe także przy rozłączeniu klienta.
+
+**Wymagane dowody T2.** Testy integracyjne uruchamiają prawdziwy worker
+z osobnym adapterem wyłącznie testowym: sukces, odrzucenie treści, awaria
+przed/po checkpoint, timeout, utrata rodzica, powtórzony ACK i spóźniony
+wynik. Osobne procesy muszą potwierdzić wzajemne wykluczanie workera
+oraz wyścig `put_at`–cancel–cleanup, także po śmierci procesu.
+Test domyślnego powiązania potwierdza jawny brak adaptera i brak sukcesu.
+Pomiary 500 tabel w T2 opisują odbiór, wstępne sprawdzenie i zapis;
+adapter testowy nie potwierdza rozpoznania tych tabel ani kwalifikacji T3/T4.
+Mechanizmy POSIX i jawne środowisko procesu sprawdzono w dokumentacji
+[Python 3.14: flock](https://docs.python.org/3.14/library/fcntl.html#fcntl.flock)
+oraz [subprocess](https://docs.python.org/3.14/library/subprocess.html),
+18 listopada 2026; skuteczność protokołu wymaga wskazanych testów.
+
 | ID | Kierunek | Status i warunek |
 | --- | --- | --- |
 | DA-01 | Wymienność przez Ports & Adapters, wstrzykiwanie zależności i testy kontraktowe. | Zapisany kierunek. Mikroserwisy nie zastępują stabilnych kontraktów. |
@@ -923,3 +1026,62 @@ ponowienie oraz oba sposoby podawania frontendu. Osobno trzeba odtworzyć
 ograniczoną gotowość przy brakującej konfiguracji i awarii bazy, zachowanie
 danych po ponownym starcie oraz dostępność panelu przy zatrzymanym API.
 To decyzja techniczna do wykonania, nie wynik testów ani ręczna akceptacja.
+
+**Decyzja techniczna architekta — 19 listopada 2026:** w S2-T2 przypinamy
+`sqlglot==30.33.0` bez dodatków `c`/`rs` oraz `python-multipart==0.0.34`.
+Pierwszy pakiet służy tu wyłącznie tokenizacji PostgreSQL rozróżniającej
+komentarze i literały; nie zastępuje T3/T4. Drugi udostępnia niskopoziomowy
+`python_multipart.MultipartParser`, zasilany porcjami z `Request.stream()`
+dopiero po sprawdzeniu właściciela, rezerwacji i slotu. Nie deklarujemy
+`File`/`UploadFile` ani nie wywołujemy `request.form()` przed tą kontrolą.
+Kompletność potwierdzają `on_end`, zamknięte części i zgodność manifestu;
+samo `finalize()` jej nie gwarantuje. Limity kontrolujemy podczas odbioru
+i w callbackach, niezależnie od metadanych klienta. Deklaracje pakietów
+dopuszczają Python 3.14, a FastAPI 0.135.1 podaje `python-multipart>=0.0.18`
+bez górnej granicy. Faktyczna zgodność wymaga lock/sync oraz testów odbioru,
+granic limitów, urwanego multipart i komentarzy/literałów. Źródła sprawdzone
+19.11.2026: [SQLGlot](https://pypi.org/project/sqlglot/30.33.0/),
+[python-multipart](https://pypi.org/project/python-multipart/0.0.34/),
+[FastAPI 0.135.1](https://github.com/fastapi/fastapi/blob/0.135.1/pyproject.toml),
+[API MultipartParser](https://multipart.fastapiexpert.com/api/).
+
+**Zakaz operacji sieciowych workera — doprecyzowanie techniczne 19 listopada 2026:**
+worker wykonuje wyłącznie zaufany parser aplikacji i traktuje DDL jako dane.
+Nie ma klienta sieciowego ani dostawcy LLM. Przed importem adaptera instaluje
+`sys.addaudithook`, który przerywa zdarzenia `socket.*` oraz uruchamianie
+innych procesów (`subprocess.Popen`, `os.system`, `os.exec`, `os.posix_spawn`,
+`os.fork`, `os.forkpty`). Obowiązuje wcześniej ustalona jawna lista środowiska
+i deskryptorów; kanały koordynatora są potokami, bez odziedziczonych socketów.
+Mechanizm egzekwuje brak przypadkowych operacji TCP/UDP/DNS w zaufanym kodzie
+Pythona na macOS i Linux. Nie jest izolacją systemu operacyjnego odporną na
+złośliwy kod natywny ani pozwoleniem na wykonywanie SQL/Pythona użytkownika.
+Taki sandbox nie był dotąd przyjętym mechanizmem T2. Prawdziwy worker musi
+w testach odmówić utworzenia socketu i DNS przed I/O; test w rodzicu nie
+wystarcza. Źródła: [sys.addaudithook — ograniczenia](https://docs.python.org/3.14/library/sys.html#sys.addaudithook),
+[zdarzenia audytu CPython](https://docs.python.org/3.14/library/audit_events.html),
+sprawdzone 19.11.2026.
+
+**Własność koordynatora przy publikacji — decyzja architekta, 19 listopada 2026:**
+checkpoint, publikacja wyniku, rezerwacja uruchomienia i odzyskiwanie oraz
+zmiany retry i sprzątania wykonywane przez koordynatora używają krótkich
+transakcji na tym samym fizycznym połączeniu, które posiada jego sesyjną
+blokadę advisory. Osobny zapis przez pulę po wcześniejszym sprawdzeniu blokady
+jest niedopuszczalny. Połączenie odłączamy od puli przez `Connection.detach()`
+przed elekcją, aby jego zamknięcie kończyło sesję i zwalniało blokadę. Jeden
+mutex serializuje transakcje, heartbeat oraz zamknięcie; nie trzymamy go podczas
+oczekiwania na parser lub blokady plikowe. Każda elekcja ma odrębny, nieprzepinany
+obiekt właściciela, przechwycony przez callbacki jej workera. Przed transakcją
+sprawdzamy aktywność tego obiektu, tożsamość fizycznego połączenia i posiadanie
+właściwej blokady przez jego sesję. Zamkniętego lub unieważnionego połączenia
+nie odnawiamy dla starej elekcji. Utrata połączenia wycofuje tę generację i
+zatrzymuje worker; nie wolno zapisać jej wyniku ani błędu przez nowe połączenie.
+Nowy lider najpierw odczytuje trwały stan, a następnie stosuje recovery z nowym
+epoch. Warunki epoch, slotu, stanu, wersji, manifestu i profilu pozostają w
+transakcji. Utrata sesji przed COMMIT uniemożliwia publikację; poprawnie
+zatwierdzony wynik pozostaje ważny po późniejszej utracie połączenia. Jeśli
+odpowiedź COMMIT zaginęła, o wyniku rozstrzyga odczyt bazy po nowej elekcji,
+bez ponownego wykonania starej publikacji. Źródła:
+[PostgreSQL 18](https://www.postgresql.org/docs/18/explicit-locking.html#ADVISORY-LOCKS),
+[SQLAlchemy](https://docs.sqlalchemy.org/en/20/core/connections.html#sqlalchemy.engine.Connection.detach),
+[Psycopg 3](https://www.psycopg.org/psycopg3/docs/advanced/async.html#concurrent-operations),
+sprawdzone 19.11.2026.
