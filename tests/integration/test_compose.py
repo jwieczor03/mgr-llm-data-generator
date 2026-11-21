@@ -270,3 +270,40 @@ def test_projects_http_survive_backend_restart(stack: Stack):
     assert project in json.loads(stack.get("/api/v1/projects")[2])["items"]
     stack.run("up", "-d", "--force-recreate", "--no-deps", "--wait", "application-api")
     assert json.loads(stack.get("/api/v1/projects/" + project["id"])[2]) == project
+
+
+def test_ddl_upload_runs_worker_in_real_api_container(stack: Stack):
+    import time
+    from urllib.request import Request
+
+    address = stack.run("port", "application-api", "8000")
+    base = f"http://{address}"
+
+    def call(path, method="GET", data=None, headers=None):
+        request = Request(base + path, data=data, method=method, headers=headers or {})
+        with urlopen(request, timeout=10) as response:
+            return json.loads(response.read())
+
+    project = call("/api/v1/projects", "POST", b'{"name":"Compose DDL"}', {"Content-Type": "application/json"})["id"]
+    attempt, page = str(uuid4()), str(uuid4())
+    path = f"/api/v1/projects/{project}/ddl-attempts/{attempt}"
+    reservation = json.dumps({"page_id": page, "files": [{"name": "a.sql", "size_bytes": 8}]}).encode()
+    call(path, "PUT", reservation, {"Content-Type": "application/json"})
+    body = b'--bundle\r\nContent-Disposition: form-data; name="files"; filename="a.sql"\r\n\r\nSELECT 1\r\n--bundle--\r\n'
+    staged = call(path + "/files", "POST", body, {"Content-Type": "multipart/form-data; boundary=bundle", "X-DDL-Page-ID": page})
+    assert staged["status"] == "STAGED"
+    ack = json.dumps({"page_id": page, "receipt_nonce": staged["receipt_nonce"]}).encode()
+    version = call(path + "/receipt", "POST", ack, {"Content-Type": "application/json"})["schema_version_id"]
+    deadline = time.monotonic() + 40
+    while time.monotonic() < deadline:
+        state = call(path)
+        if state["status"] == "FAILED_TECHNICAL":
+            break
+        time.sleep(.25)
+    else:
+        pytest.fail("worker did not reach terminal status")
+    assert state["launch_count"] == 4
+    assert state["diagnostics"][0]["code"] == "DDL_ANALYZER_UNAVAILABLE"
+    files = call(f"/api/v1/projects/{project}/schema-versions/{version}")["files"]
+    with urlopen(base + f"/api/v1/projects/{project}/schema-versions/{version}/files/{files[0]['id']}", timeout=10) as response:
+        assert response.read() == b"SELECT 1"

@@ -1032,8 +1032,13 @@ reguły i relacje, usuwanie lub edycja projektu, konta oraz historia czatów.
 
 #### S2-T2 — Dodać wgrywanie i przechowywanie pełnych wersji DDL
 
-**Status opisu:** częściowo uzgodniony szkic, **do wyjaśnienia**.
-Nie jest gotową instrukcją implementacji bez kontraktów wskazanych poniżej.
+**Stan implementacji — 19 listopada 2026:** zapis paczki, rezerwacja,
+potwierdzenie, wersje, odzyskiwanie i izolowany worker są dostarczane w
+[S2-T2, issue #26](https://github.com/jwieczor03/mgr-llm-data-generator/issues/26).
+Parser i ocena obsługiwalności pozostają w S2-T3/T4: do ich integracji analiza
+kończy się błędem technicznym, bez wyboru nowej wersji domyślnej. Ręczny
+odbiór należy do użytkownika; kroki API znajdują się w README. Poniższy opis
+zachowano historycznie; aktualny zakres techniczny określa issue #26.
 **Story nadrzędne:** S2 — Zapisane projekty i rozpoznawanie schematu.
 **Cel:** zachować oryginalne pliki i kolejność każdej pełnej wersji
 schematu bez nadpisywania poprzednich wersji.

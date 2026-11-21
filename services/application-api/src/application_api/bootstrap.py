@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,9 @@ from application_api.access import AccessPolicy, OwnershipAccessPolicy
 from application_api.artifact_store import LocalArtifactStore, UnconfiguredArtifactStore
 from application_api.config import load_config
 from application_api.database import Database
+from application_api.ddl_api import router as ddl_router
+from application_api.ddl_config import DdlSettings
+from application_api.ddl_coordinator import DdlCoordinator
 from application_api.diagnostics import check, probe, report
 from application_api.identity import (
     ActorContext,
@@ -29,6 +33,26 @@ async def lifespan(app: FastAPI):
                            else LocalArtifactStore(app.state.settings.artifact_project_root, app.state.settings.artifact_working_root))
     app.state.database = Database(app.state.settings, app.state.config_report)
     await run_in_threadpool(app.state.database.start)
+    app.state.ddl_settings = None
+    app.state.ddl_runtime = None
+    coordinator = None
+    try:
+        ddl_settings = DdlSettings()
+        if (app.state.settings and app.state.settings.artifact_working_root
+                and getattr(app.state.database, "migration_status", None) == "applied"):
+            runtime = Path(ddl_settings.ddl_runtime_root or Path(app.state.settings.artifact_working_root) / "ddl-runtime")
+            if not runtime.is_absolute():
+                raise ValueError("runtime path must be absolute")
+            runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
+            fd = os.open(runtime, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            os.close(fd)
+            app.state.ddl_settings, app.state.ddl_runtime = ddl_settings, runtime
+            coordinator = DdlCoordinator(app.state.database, app.state.artifacts, runtime,
+                                         ddl_settings.ddl_worker_timeout_seconds)
+            coordinator.start()
+            await run_in_threadpool(coordinator.ready_event.wait, 5)
+    except (OSError, ValueError):
+        pass  # The existing diagnostics remain available when DDL is unavailable.
     try:
         await ready_for_app(app)
     except Exception:
@@ -36,6 +60,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if coordinator:
+            await run_in_threadpool(coordinator.stop)
         await run_in_threadpool(app.state.database.close)
 
 
@@ -124,6 +150,7 @@ def create_app(
                                         else actor_context_provider)
     app.state.access_policy = OwnershipAccessPolicy() if access_policy is None else access_policy
     app.include_router(projects_router)
+    app.include_router(ddl_router)
     app.add_api_route("/health/live", live, methods=["GET"])
     app.add_api_route("/health/ready", ready, methods=["GET"])
     app.add_api_route("/health/config", config, methods=["GET"])

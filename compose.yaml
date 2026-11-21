@@ -16,9 +16,11 @@ services:
     environment:
       ARTIFACT_PROJECT_ROOT: /var/lib/application-api/project
       ARTIFACT_WORKING_ROOT: /var/lib/application-api/working
+      DDL_RUNTIME_ROOT: /var/lib/application-api/ddl-runtime
     volumes:
       - artifact-project-data:/var/lib/application-api/project
       - artifact-working-data:/var/lib/application-api/working
+      - ddl-runtime-data:/var/lib/application-api/ddl-runtime
     ports:
       - "127.0.0.1:8000:8000"
     networks: [services, database]
@@ -86,3 +88,4 @@ volumes:
   app-db-data:
   artifact-project-data:
   artifact-working-data:
+  ddl-runtime-data:
