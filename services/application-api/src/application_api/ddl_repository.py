@@ -187,11 +187,14 @@ class DdlRepository:
                 receipt_nonce_hash=:hash, lease_expires_at=NULL WHERE id=:id"""), {"id": attempt_id, "hash": nonce_hash})
             return version_id
 
-    def begin_cleanup(self, project_id, attempt_id, target, page_id=None, diagnostics=None):
+    def begin_cleanup(self, project_id, attempt_id, target, page_id=None, diagnostics=None, *, upload_epoch=None):
         with self.database.session() as session:
             slot = _slot(session)
             row = _attempt(session, project_id, attempt_id)
             if row is None:
+                return None
+            # A failed upload may clean up only the same still-unacknowledged transfer.
+            if upload_epoch is not None and (row["status"] not in PRE_ACK or row["execution_epoch"] != upload_epoch):
                 return None
             if row["status"] in PRE_ACK and page_id is not None:
                 _page(row, page_id)
@@ -247,10 +250,15 @@ class DdlRepository:
                 return None
             if row["status"] == "RETRY_WAIT" and row["next_attempt_at"] > now():
                 return None
-            if row["status"] == "ANALYZING" and not recovery:
+            if row["status"] == "ANALYZING":
+                if recovery:
+                    # Fence the lost execution before persisting its retry deadline.
+                    session.execute(text("UPDATE app.ddl_attempts SET execution_epoch=execution_epoch+1 WHERE id=:id"),
+                                    {"id": attempt_id})
+                    self._worker_failed_locked(session, row, "DDL_WORKER_FAILED")
                 return None
             if row["launch_count"] >= 4:
-                self._fail_locked(session, attempt_id, "DDL_ANALYZER_UNAVAILABLE")
+                self._fail_locked(session, attempt_id, "DDL_WORKER_FAILED")
                 return None
             session.execute(text("""UPDATE app.ddl_attempts SET status='ANALYZING', execution_epoch=execution_epoch+1,
                 launch_count=launch_count+1, next_attempt_at=NULL WHERE id=:id"""), {"id": attempt_id})
@@ -265,14 +273,19 @@ class DdlRepository:
             row = _row(session, "SELECT * FROM app.ddl_attempts WHERE id=:id FOR UPDATE", {"id": attempt_id})
             if row is None or row["status"] != "ANALYZING" or row["execution_epoch"] != epoch:
                 return
-            if row["launch_count"] >= 4:
-                self._fail_locked(session, attempt_id, code)
-            else:
-                delay = (1, 5, 15)[row["launch_count"] - 1]
-                session.execute(text("""UPDATE app.ddl_attempts SET status='RETRY_WAIT', next_attempt_at=:next,
-                    diagnostics=CAST(:diagnostics AS jsonb) WHERE id=:id"""),
-                    {"id": attempt_id, "next": now() + timedelta(seconds=delay),
-                     "diagnostics": json.dumps([{"code": code}])})
+            self._worker_failed_locked(session, row, code)
+
+    @staticmethod
+    def _worker_failed_locked(session, row, code):
+        attempt_id = row["id"]
+        if row["launch_count"] >= 4:
+            DdlRepository._fail_locked(session, attempt_id, code)
+        else:
+            delay = (1, 5, 15)[row["launch_count"] - 1]
+            session.execute(text("""UPDATE app.ddl_attempts SET status='RETRY_WAIT', next_attempt_at=:next,
+                diagnostics=CAST(:diagnostics AS jsonb) WHERE id=:id"""),
+                {"id": attempt_id, "next": now() + timedelta(seconds=delay),
+                 "diagnostics": json.dumps([{"code": code}])})
 
     @staticmethod
     def _fail_locked(session, attempt_id, code):

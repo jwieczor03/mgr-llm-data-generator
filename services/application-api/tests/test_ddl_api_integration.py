@@ -500,3 +500,132 @@ def test_coordinator_recovers_after_database_session_is_killed(client, db):
         assert client.get(path).json()["launch_count"] == 2
     finally:
         coordinator.stop()
+
+
+def test_late_upload_failure_after_receipt_does_not_cancel_accepted_version(client, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from application_api.ddl_repository import DdlRepository
+
+    client.app.state.ddl_coordinator.stop()
+    project = client.post("/api/v1/projects", json={"name": "Late upload failure"}).json()["id"]
+    root = f"/api/v1/projects/{project}"
+    path = f"{root}/ddl-attempts/{uuid.uuid4()}"
+    page = str(uuid.uuid4())
+    assert client.put(path, json={"page_id": page, "files": [{"name": "a.sql", "size_bytes": 8}]}).status_code == 201
+    staged, release = threading.Event(), threading.Event()
+    original = DdlRepository.staged
+
+    def stage_then_fail(*args, **kwargs):
+        original(*args, **kwargs)
+        staged.set()
+        assert release.wait(5)
+        raise OSError("lost upload response")
+
+    monkeypatch.setattr(DdlRepository, "staged", stage_then_fail)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        upload = pool.submit(client.post, path + "/files", files={"files": ("a.sql", b"SELECT 1")},
+                             headers={"X-DDL-Page-ID": page})
+        try:
+            assert staged.wait(5)
+            state = client.get(path, headers={"X-DDL-Page-ID": page}).json()
+            assert state["status"] == "STAGED"
+            ack = client.post(path + "/receipt", json={"page_id": page, "receipt_nonce": state["receipt_nonce"]})
+            assert ack.status_code == 202
+        finally:
+            release.set()
+        assert upload.result(timeout=5).status_code == 500
+    version = ack.json()["schema_version_id"]
+    assert client.get(path).json()["status"] == "ANALYSIS_PENDING"
+    assert client.get(f"{root}/schema-versions/{version}").status_code == 200
+    assert client.get(root + "/ddl-processing").json()["busy"] is True
+
+
+def test_invalid_utf8_json_uses_validation_error_envelope(client):
+    path = f"/api/v1/projects/{uuid.uuid4()}/ddl-attempts/{uuid.uuid4()}"
+    response = client.put(path, content=b"\xff", headers={"Content-Type": "application/json"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.headers["X-Request-ID"] == response.json()["error"]["request_id"]
+
+
+def test_version_views_follow_attempt_state_through_cleanup(client, db):
+    from application_api.ddl_repository import DdlRepository
+
+    client.app.state.ddl_coordinator.stop()
+    project = client.post("/api/v1/projects", json={"name": "Version status"}).json()["id"]
+    root = f"/api/v1/projects/{project}"
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f"{root}/ddl-attempts/{attempt}"
+    assert client.put(path, json={"page_id": page, "files": [{"name": "a.sql", "size_bytes": 8}]}).status_code == 201
+    stage = client.post(path + "/files", files={"files": ("a.sql", b"SELECT 1")}, headers={"X-DDL-Page-ID": page})
+    version = client.post(path + "/receipt", json={"page_id": page, "receipt_nonce": stage.json()["receipt_nonce"]}).json()["schema_version_id"]
+    version_path = f"{root}/schema-versions/{version}"
+    repo = DdlRepository(db)
+
+    def verify(status):
+        operation = client.get(path).json()
+        detail = client.get(version_path).json()
+        items = client.get(root + "/schema-versions").json()["items"]
+        assert operation["status"] == detail["status"] == items[0]["status"] == status
+        assert operation["diagnostics"] == detail["diagnostics"] == items[0]["diagnostics"]
+
+    verify("ANALYSIS_PENDING")
+    launch = repo.launch(uuid.UUID(attempt))
+    verify("ANALYZING")
+    repo.worker_failed(uuid.UUID(attempt), launch["epoch"], "DDL_WORKER_FAILED")
+    verify("RETRY_WAIT")
+    assert client.post(path + "/cancel").status_code == 202
+    verify("CANCELLING")
+    repo.cleanup_failed(uuid.UUID(attempt))
+    verify("CLEANUP_FAILED")
+    for artifact in repo.cleanup_files(uuid.UUID(attempt)):
+        from application_api.artifact_store import ArtifactRef
+        client.app.state.artifacts.delete(ArtifactRef("project", str(artifact)))
+    repo.finish_cleanup(uuid.UUID(attempt))
+    assert client.get(version_path).status_code == 404
+    assert client.get(root + "/schema-versions").json()["items"] == []
+
+
+def test_slow_content_validation_does_not_block_other_api_requests(client, monkeypatch):
+    import asyncio
+    import threading
+
+    import httpx
+    from application_api import ddl_api
+
+    project = client.post("/api/v1/projects", json={"name": "Responsive"}).json()["id"]
+    root = f"/api/v1/projects/{project}"
+    path = f"{root}/ddl-attempts/{uuid.uuid4()}"
+    page = str(uuid.uuid4())
+    assert client.put(path, json={"page_id": page, "files": [{"name": "a.sql", "size_bytes": 8}]}).status_code == 201
+    entered, release = threading.Event(), threading.Event()
+    timed_out = []
+    original = ddl_api.validate_content
+
+    def controlled_validation(contents):
+        entered.set()
+        if not release.wait(4):
+            timed_out.append(True)
+        return original(contents)
+
+    monkeypatch.setattr(ddl_api, "validate_content", controlled_validation)
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+            upload = asyncio.create_task(async_client.post(path + "/files", files={"files": ("a.sql", b"SELECT 1")},
+                                                            headers={"X-DDL-Page-ID": page}))
+            try:
+                assert await asyncio.to_thread(entered.wait, 2)
+                response = await asyncio.wait_for(async_client.get(root + "/ddl-processing"), timeout=2)
+                assert response.status_code == 200 and response.json()["busy"]
+                assert not timed_out
+            finally:
+                release.set()
+                await upload
+
+    asyncio.run(scenario())
+    assert client.post(path + "/cancel", json={"page_id": page}).status_code == 202
+    wait_for(lambda: client.get(path).json().get("status") == "CANCELLED")

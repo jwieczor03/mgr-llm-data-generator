@@ -1085,3 +1085,33 @@ bez ponownego wykonania starej publikacji. Źródła:
 [SQLAlchemy](https://docs.sqlalchemy.org/en/20/core/connections.html#sqlalchemy.engine.Connection.detach),
 [Psycopg 3](https://www.psycopg.org/psycopg3/docs/advanced/async.html#concurrent-operations),
 sprawdzone 19.11.2026.
+
+**Bieżący stan wersji DDL — doprecyzowanie techniczne, 21 listopada 2026:**
+odczyt pojedynczej wersji i lista wersji zwracają aktualny stan jej analizy,
+zgodny ze stanem przyjętej próby. Jedyną maszyną stanów jest
+`ddl_attempts.status`; widok wersji pokazuje ten stan i diagnostykę z tego
+samego wiersza bazy. Po ACK wersja może pokazywać `ANALYSIS_PENDING`,
+`ANALYZING`, `RETRY_WAIT`, `SUCCEEDED`, `REJECTED_DDL`, `FAILED_TECHNICAL`,
+`CANCELLING` lub `CLEANUP_FAILED`. Po skutecznym usunięciu wersja zwraca 404
+i nie jest widoczna na liście. Techniczna kolumna stanu wersji nie jest
+źródłem bieżącego stanu API. Odczyty wykonane osobno mogą przypadać na różne
+chwile; decyzja nie zmienia zasad przyjęcia, ponowień ani anulowania.
+
+**Badanie niepustości DDL — rozstrzygnięcie architekta po review F3,
+21 listopada 2026:** w T2 zastępujemy budowanie pełnej listy tokenów SQLGlot
+skanerem samego początku tekstu. Skaner pomija białe znaki, komentarze `--`
+do CR/LF lub końca pliku oraz kompletne komentarze `/* ... */`, także
+zagnieżdżone zgodnie z PostgreSQL. Kończy przy pierwszym innym znaku, więc
+nie interpretuje ani nie usuwa markerów komentarza wewnątrz literałów.
+Niedomknięty komentarz blokowy jest przekazywany jako treść do T3, bez
+mylenia błędu składni z pustym plikiem. Wyłącznie koniec po białych znakach
+i kompletnych komentarzach oznacza `DDL_EMPTY_FILE`. Indeks przechodzi tekst
+monotonicznie, bez listy tokenów, drzewa składni ani kopii usuwających
+komentarze; koszt skanera jest liniowy, a pomocnicza pamięć stała. Walidacja
+treści działa poza pętlą zdarzeń przez `run_in_threadpool`. Ścisłe sprawdzenie
+UTF-8 nadal obejmuje cały plik; zbiorcza diagnostyka pozostaje bez zmian.
+Nie dodajemy zależności ani niższych limitów. SQLGlot pozostaje wybranym
+narzędziem analizy T3/T4. Decyzja zastępuje wcześniejszy wybór pełnej
+tokenizacji do wstępnej kontroli T2. Źródło:
+[PostgreSQL 18 — komentarze](https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-COMMENTS),
+sprawdzone 21 listopada 2026.

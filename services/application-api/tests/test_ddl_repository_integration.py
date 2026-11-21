@@ -79,3 +79,35 @@ def test_retry_deadlines_are_durable_and_maximum_is_four(db):
             else:
                 assert row.status == "FAILED_TECHNICAL"
                 assert session.execute(text("SELECT attempt_id FROM app.ddl_slot WHERE singleton=1")).scalar_one() is None
+
+
+def test_crashed_worker_recovery_schedules_durable_backoff(db):
+    from datetime import datetime, timedelta, timezone
+
+    db.start()
+    project, page, attempt, artifact = (uuid.uuid4() for _ in range(4))
+    with db.session() as session:
+        session.execute(text("INSERT INTO app.projects (id,owner_subject,name,name_key,created_at) VALUES (:id,'o','p','p',now())"), {"id": project})
+    repo = DdlRepository(db)
+    repo.reserve(project, "o", attempt, page, [{"name": "a.sql", "size_bytes": 8}])
+    _, epoch = repo.start_receiving(project, attempt, page)
+    repo.journal(project, attempt, epoch, artifact)
+    nonce = repo.staged(project, attempt, epoch, [{"id": uuid.uuid4(), "position": 0, "name": "a.sql", "size_bytes": 8,
+                                                  "sha256": "0" * 64, "artifact_id": artifact}])
+    repo.acknowledge(project, attempt, page, nonce)
+    for launch_count, delay in enumerate((1, 5, 15, None), 1):
+        run = repo.launch(attempt)
+        assert run["launch_count"] == launch_count
+        before = datetime.now(timezone.utc)
+        assert repo.launch(attempt, recovery=True) is None
+        with db.session() as session:
+            row = session.execute(text("SELECT status, next_attempt_at, launch_count, diagnostics FROM app.ddl_attempts WHERE id=:id"), {"id": attempt}).first()
+            if delay is None:
+                assert row.status == "FAILED_TECHNICAL"
+                assert row.diagnostics[0]["code"] == "DDL_WORKER_FAILED"
+            else:
+                assert row.status == "RETRY_WAIT" and row.launch_count == launch_count
+                assert timedelta(seconds=delay) <= row.next_attempt_at - before < timedelta(seconds=delay + 1)
+                assert row.diagnostics[0]["code"] == "DDL_WORKER_FAILED"
+                assert repo.launch(attempt) is None
+                session.execute(text("UPDATE app.ddl_attempts SET next_attempt_at=now() WHERE id=:id"), {"id": attempt})

@@ -6,8 +6,6 @@ from typing import AsyncIterable
 from python_multipart import MultipartParser
 from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import parse_options_header
-from sqlglot import Dialect
-from sqlglot.errors import TokenError
 
 
 @dataclass(frozen=True)
@@ -39,10 +37,35 @@ def validate_metadata(files: list[dict], limits: InputLimits) -> None:
                                                     "max_total_bytes": limits.max_total_bytes})
 
 
+def has_sql_content(sql: str) -> bool:
+    """Skip only leading whitespace and PostgreSQL comments; leave all SQL to T3."""
+    index, length = 0, len(sql)
+    while index < length:
+        if sql[index].isspace():
+            index += 1
+        elif sql.startswith("--", index):
+            index += 2
+            while index < length and sql[index] not in "\r\n":
+                index += 1
+        elif sql.startswith("/*", index):
+            depth, index = 1, index + 2
+            while depth and index < length:
+                if sql.startswith("/*", index):
+                    depth, index = depth + 1, index + 2
+                elif sql.startswith("*/", index):
+                    depth, index = depth - 1, index + 2
+                else:
+                    index += 1
+            if depth:
+                return True  # An unclosed comment is a syntax error, not an empty file.
+        else:
+            return True
+    return False
+
+
 def validate_content(files: list[tuple[str, bytes]]) -> list[dict]:
     diagnostics = []
     names: dict[str, list[int]] = {}
-    tokenizer = Dialect.get_or_raise("postgres").tokenizer()
     for position, (name, content) in enumerate(files):
         names.setdefault(name.casefold(), []).append(position)
         try:
@@ -50,12 +73,7 @@ def validate_content(files: list[tuple[str, bytes]]) -> list[dict]:
         except UnicodeDecodeError:
             diagnostics.append({"code": "DDL_INVALID_ENCODING", "file": name, "position": position})
             continue
-        try:
-            has_tokens = bool(tokenizer.tokenize(sql))
-        except TokenError:
-            # Lexical/syntax problems belong to the later DDL analysis, not input emptiness.
-            has_tokens = True
-        if not has_tokens:
+        if not has_sql_content(sql):
             diagnostics.append({"code": "DDL_EMPTY_FILE", "file": name, "position": position})
     for positions in names.values():
         if len(positions) > 1:

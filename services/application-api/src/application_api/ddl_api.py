@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeout
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException
 
 from application_api.access import AccessDenied
 from application_api.artifact_store import ArtifactRef
@@ -38,6 +39,11 @@ class DdlRoute(APIRoute):
                 return response
             except RequestValidationError:
                 status, code, details = 422, "VALIDATION_ERROR", {}
+            except HTTPException as exc:
+                if exc.status_code == 400 and isinstance(exc.__cause__, UnicodeDecodeError):
+                    status, code, details = 422, "VALIDATION_ERROR", {}
+                else:
+                    status, code, details = 500, "INTERNAL_ERROR", {}
             except InputError as exc:
                 code, details = exc.code, exc.details or {}
                 if code == "DDL_UPLOAD_ALREADY_RECEIVED":
@@ -149,9 +155,10 @@ async def upload(project_id: UUID, attempt_id: UUID4, request: Request, x_ddl_pa
     try:
         contents = await receive_multipart(request.headers.get("content-type", ""), request.stream(), files,
                                            request.app.state.ddl_settings.limits(), check_active)
-        diagnostics = validate_content(contents)
+        diagnostics = await run_in_threadpool(validate_content, contents)
         if diagnostics:
-            await run_in_threadpool(repo.begin_cleanup, project_id, attempt_id, "REJECTED_INPUT", x_ddl_page_id, diagnostics)
+            await run_in_threadpool(repo.begin_cleanup, project_id, attempt_id, "REJECTED_INPUT", x_ddl_page_id,
+                                    diagnostics, upload_epoch=epoch)
             raise InputError("DDL_INPUT_INVALID", {"diagnostics": diagnostics})
         manifest = []
         for position, (name, content) in enumerate(contents):
@@ -160,11 +167,12 @@ async def upload(project_id: UUID, attempt_id: UUID4, request: Request, x_ddl_pa
                                     project_id, attempt_id, epoch, ref, content)
             manifest.append({"id": uuid4(), "position": position, "name": name, "size_bytes": len(content),
                              "sha256": sha256(content), "artifact_id": UUID(ref.id)})
-        nonce = await run_in_threadpool(repo.staged, project_id, attempt_id, epoch, manifest)
+        await run_in_threadpool(repo.staged, project_id, attempt_id, epoch, manifest)
         state = await run_in_threadpool(repo.get, project_id, attempt_id, x_ddl_page_id)
-        return public_attempt(state) | {"receipt_nonce": nonce}
+        return public_attempt(state)
     except BaseException:
-        await run_in_threadpool(repo.begin_cleanup, project_id, attempt_id, "CANCELLED", x_ddl_page_id)
+        await run_in_threadpool(repo.begin_cleanup, project_id, attempt_id, "CANCELLED", x_ddl_page_id,
+                                upload_epoch=epoch)
         raise
 
 
@@ -196,7 +204,8 @@ def processing(project_id: UUID, request: Request):
 
 def _version(repo, project_id, version_id):
     with repo.database.session() as session:
-        row = session.execute(text("""SELECT v.*, a.diagnostics FROM app.schema_versions v
+        row = session.execute(text("""SELECT v.id, v.project_id, v.attempt_id, v.revision_no, v.manifest_hash,
+            v.analysis_profile, v.created_at, a.status, a.diagnostics FROM app.schema_versions v
             JOIN app.ddl_attempts a ON a.id=v.attempt_id WHERE v.project_id=:project AND v.id=:id"""),
             {"project": project_id, "id": version_id}).mappings().first()
         if row is None:

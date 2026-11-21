@@ -45,3 +45,26 @@ def test_streamed_multipart_and_incomplete():
         run(body, meta, InputLimits(max_file_bytes=7))
     with pytest.raises(InputError, match="DDL_ATTEMPT_CONFLICT"):
         run(body, [{"name": "other", "size_bytes": 8}])
+
+
+@pytest.mark.parametrize("sql,empty", [
+    (b"", True), (b"\xef\xbb\xbf \t-- line\r\n/* outer /* inner */ end */", True),
+    (b"-- comment", True), (b"/* nested /* inner */", False),
+    (b"'-- literal'", False), (b'"/* literal */"', False),
+    (b"$$-- literal$$", False), (b"E'/* literal */'", False),
+    (b'"-- identifier"', False), (b"U&'/* literal */'", False),
+    (b"/* closed */ -- tail\rSELECT 1", False),
+])
+def test_empty_prefix_scanner_and_unclosed_comments(sql, empty):
+    result = validate_content([("a.sql", sql)])
+    assert any(item["code"] == "DDL_EMPTY_FILE" for item in result) is empty
+
+
+def test_encoding_is_checked_after_first_sql_character():
+    assert validate_content([("a.sql", b"SELECT 1;\xff")])[0]["code"] == "DDL_INVALID_ENCODING"
+
+
+def test_large_comments_and_deeply_nested_unterminated_prefix():
+    assert validate_content([("a.sql", b"/*" + b"x" * 1_000_000 + b"*/")])[0]["code"] == "DDL_EMPTY_FILE"
+    assert validate_content([("a.sql", b"/*" * 20_000)]) == []
+    assert validate_content([("a.sql", b"/*" * 20_000 + b"*/" * 20_000)])[0]["code"] == "DDL_EMPTY_FILE"
