@@ -1,15 +1,33 @@
+import base64
+import hashlib
 import json
 import os
 import subprocess
 import sys
+from uuid import uuid4
 
 from application_api.ddl_process import WorkerProcess
+from application_api.ddl_repository import PROFILE
+from application_api.schema_contracts import (
+    Checkpoint,
+    DdlBundle,
+    ManifestFile,
+    manifest_digest,
+)
 
 
 def test_production_worker_reports_analyzer_unavailable(tmp_path):
-    result = WorkerProcess(tmp_path).run({"files": []})
+    content = b'CREATE TABLE t (id int);'
+    file = ManifestFile(file_id=uuid4(), name='t.sql', position=0, size_bytes=len(content),
+                        sha256=hashlib.sha256(content).hexdigest(), artifact_id=uuid4())
+    bundle = DdlBundle(schema_version_id=uuid4(), manifest_hash=manifest_digest([file]), files=[file])
+    request = {'bundle': bundle.model_dump(mode='json'), 'profile': PROFILE.model_dump(mode='json'),
+               'files_base64': [base64.b64encode(content).decode()], 'checkpoint': None}
+    result = WorkerProcess(tmp_path).run(request)
     assert result.error is None
-    assert result.messages == [{"type": "error", "code": "DDL_ANALYZER_UNAVAILABLE"}]
+    assert [message['type'] for message in result.messages] == ['checkpoint', 'error']
+    assert Checkpoint.model_validate(result.messages[0]['checkpoint']).valid_for(bundle, PROFILE)
+    assert result.messages[-1] == {'type': 'error', 'code': 'DDL_ANALYZER_UNAVAILABLE'}
 
 
 def test_worker_audit_hook_blocks_socket_and_dns(tmp_path):

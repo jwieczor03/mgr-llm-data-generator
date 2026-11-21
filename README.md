@@ -77,8 +77,9 @@ projekcie. Wysyłanie wymaga rezerwacji i dodatkowego potwierdzenia odbioru;
 status można sprawdzać bez ponownego przesyłania. Jedna operacja DDL zajmuje
 wspólny slot aplikacji aż do jej zakończenia lub posprzątania.
 
-**Ograniczenie:** parser i ocena obsługiwalności należą do S2-T3/T4 i nie są
-jeszcze zaimplementowane. Po ACK bieżący worker zgłasza
+**Ograniczenie:** parser S2-T3 rozpoznaje strukturę paczki przez pglast i
+zapisuje wynik pośredni. Ocena obsługiwalności S2-T4 nie jest jeszcze
+zaimplementowana. Po zapisaniu wyniku pośredniego worker zgłasza
 `DDL_ANALYZER_UNAVAILABLE`; po czterech uruchomieniach kończy jako
 `FAILED_TECHNICAL`. Przyjęta wersja i oryginały pozostają dostępne, ale nie
 powstaje poprawna analiza ani nowa wersja domyślna. Interfejs przesyłania
@@ -108,7 +109,8 @@ Ręczna kontrola API po uruchomieniu Compose:
    nie wymaga nagłówka strony i po ponowieniach pokaże `FAILED_TECHNICAL`.
 5. `GET .../schema-versions` pokazuje wersję i jej manifest. Przez
    `GET .../schema-versions/{version_id}/files/{file_id}` pobierz oryginalne
-   bajty; `/analysis` zwraca 409, ponieważ T3/T4 jeszcze nie dostarczono.
+   bajty; `/analysis` zwraca 409, ponieważ ocena T4 i końcowa analiza
+   nie są jeszcze dostępne.
    Osobna próba `POST .../cancel` wymaga `page_id` przed ACK; po skutecznym
    sprzątaniu ma stan `CANCELLED` i nie tworzy wersji.
 

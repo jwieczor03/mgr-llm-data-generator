@@ -66,15 +66,24 @@ def test_upload_ack_retries_and_cancel(client, db):
     assert client.post(path + "/receipt", json={"page_id": page, "receipt_nonce": nonce}).json()["schema_version_id"] == version
     assert client.get(f"{root}/schema-versions/{version}/files/" + client.get(f"{root}/schema-versions/{version}").json()["files"][0]["id"]).content == data
 
+    checkpoints = []
+
     def advance():
         state = client.get(path).json()
         if state["status"] == "RETRY_WAIT":
             with db.session() as session:
+                checkpoint = session.execute(text("SELECT checkpoint FROM app.ddl_attempts WHERE id=:id"),
+                                             {"id": uuid.UUID(attempt)}).scalar_one()
+                assert checkpoint is not None
+                assert checkpoint["parsed"]["tables"][0]["name"] == "t"
+                assert checkpoint["analysis_profile"]["library_version"] == "8.9"
+                checkpoints.append(checkpoint)
                 session.execute(text("UPDATE app.ddl_attempts SET next_attempt_at=now() WHERE id=:id"), {"id": uuid.UUID(attempt)})
         return state if state["status"] == "FAILED_TECHNICAL" else None
 
     terminal = wait_for(advance)
     assert terminal["launch_count"] == 4
+    assert checkpoints and all(item == checkpoints[0] for item in checkpoints)
     repeated_upload = client.post(path + "/files", files=[("files", ("a.sql", data))],
                                   headers={"X-DDL-Page-ID": page})
     assert repeated_upload.status_code == 409

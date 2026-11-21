@@ -44,8 +44,10 @@ def main(analyze=None):
         def emit(message):
             print(json.dumps(message), flush=True)
 
-        result = ({"type": "error", "code": "DDL_ANALYZER_UNAVAILABLE"}
-                  if analyze is None else analyze(request, emit))
+        if analyze is None:
+            from application_api.ddl_worker_analysis import analyze as default_analyze
+            analyze = default_analyze
+        result = analyze(request, emit)
         emit(result)
     return 0
 
