@@ -1196,6 +1196,19 @@ PK, UNIQUE i FK zachowują w `Constraint` pola `deferrable` oraz
 składnię; jej semantykę i wykonalność sprawdzają T4 i S7. CHECK i NOT NULL
 nie zyskują obsługi odraczania. Podstawa: [CREATE TABLE PostgreSQL 18](https://www.postgresql.org/docs/18/sql-createtable.html).
 
+#### Jawne NOT NULL i oryginalna nazwa tabeli
+
+Jawne kolumnowe i tabelowe `NOT NULL` ma w modelu ograniczenie `not_null`
+z identyfikatorem kolumny i opcjonalną nazwą oraz ustawia `nullable=False`.
+Nie tworzymy takiego ograniczenia dla niejawnej niepustości wynikającej
+z PK lub IDENTITY. `ALTER ... ADD CONSTRAINT` zachowuje zakres profilu:
+PK, FK, UNIQUE i CHECK. Oryginalna nazwa tabeli to niekwalifikowany token,
+z oryginalnymi cudzysłowami; nazwa schematu pozostaje osobnym polem.
+Komentarze między składnikami nazwy pomija skaner PostgreSQL.
+
+Rozszerzenie modelu wymaga profilu adaptera `pglast-2`. Checkpoint profilu
+`pglast-1` nie pasuje do nowego profilu i nie jest ponownie używany.
+
 #### Zakres oryginalnych wyrażeń
 
 Skaner `pglast.parser.scan` i granice `RawStmt` wskazują fragment źródła;
@@ -1252,8 +1265,8 @@ Testy adaptera w `services/application-api/tests/test_ddl_parser.py` osobno
 sprawdzają model, źródło i macierze atrybutów FK/PK/UNIQUE; integracja API
 sprawdza rzeczywisty checkpoint i ponowienie. Pglast nie potwierdza semantyki
 importu. Dla paczki T2 z 10 plików (141726 bajtów), 500 tabel i 499 relacji
-pomiar rzeczywistego workera na macOS dał 4,995 s i szczyt RSS procesu
-potomnego 68730880 bajtów; wynik jest pomiarem, nie progiem ani gwarancją.
+pomiar rzeczywistego workera na macOS z profilem `pglast-2` dał 5,811 s
+i szczyt RSS procesu potomnego 69582848 bajtów; wynik jest pomiarem, nie progiem ani gwarancją.
 Z katalogu głównego repozytorium, po instalacji zależności `application-api`,
 próby można odtworzyć poleceniami:
 

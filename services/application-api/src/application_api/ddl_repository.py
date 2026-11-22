@@ -21,7 +21,7 @@ LEASE_SECONDS = 120
 PRE_ACK = ("RESERVED", "RECEIVING", "STAGED")
 ACTIVE_ANALYSIS = ("ANALYSIS_PENDING", "ANALYZING", "RETRY_WAIT")
 TERMINAL = ("SUCCEEDED", "REJECTED_INPUT", "REJECTED_DDL", "FAILED_TECHNICAL", "CANCELLED", "EXPIRED")
-PROFILE = AnalysisProfile(adapter_version="pglast-1", library_version="8.9", postgres_version="18",
+PROFILE = AnalysisProfile(adapter_version="pglast-2", library_version="8.9", postgres_version="18",
                           profile="postgres-mvp-v1")
 
 

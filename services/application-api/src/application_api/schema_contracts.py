@@ -98,7 +98,7 @@ class Column(Contract):
 class Constraint(Contract):
     constraint_id: UUID
     table_id: UUID
-    kind: Literal["primary_key", "unique", "foreign_key", "check"]
+    kind: Literal["primary_key", "unique", "foreign_key", "check", "not_null"]
     column_ids: list[UUID]
     name: str | None = None
     expression: Expression | None = None

@@ -18,7 +18,7 @@ def analyze(request, emit):
         raise ValueError('manifest hash mismatch')
     profile = AnalysisProfile.model_validate(request['profile'])
     if (profile.adapter_version, profile.library_version, profile.postgres_version, profile.profile) != (
-        'pglast-1', '8.9', '18', 'postgres-mvp-v1'
+        'pglast-2', '8.9', '18', 'postgres-mvp-v1'
     ):
         return {'type': 'error', 'code': 'DDL_ANALYZER_UNAVAILABLE'}
     raw_checkpoint = request.get('checkpoint')

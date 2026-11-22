@@ -44,6 +44,9 @@ class DdlParser:
             self.sources.append((start, start + len(text), file.file_id, text))
             pieces.extend((text, '\n'))
         self.sql = ''.join(pieces[:-1])
+        if '\x00' in self.sql:
+            self.diagnose('DDL_SYNTAX_ERROR', 'NUL byte in SQL input', self.sql.index('\x00'))
+            return self.result()
         try:
             self.tokens = scan(self.sql)
             self.token_starts = [token.start for token in self.tokens]
@@ -103,8 +106,16 @@ class DdlParser:
         if index >= len(self.tokens) or self.tokens[index].start != offset:
             return ''
         token = self.tokens[index]
-        if qualified and index + 2 < len(self.tokens) and self.tokens[index + 1].name == 'ASCII_46':
-            token = self.tokens[index + 2]
+        if qualified:
+            next_index = index + 1
+            while next_index < len(self.tokens) and self.tokens[next_index].name in {'C_COMMENT', 'SQL_COMMENT'}:
+                next_index += 1
+            if next_index < len(self.tokens) and self.tokens[next_index].name == 'ASCII_46':
+                next_index += 1
+                while next_index < len(self.tokens) and self.tokens[next_index].name in {'C_COMMENT', 'SQL_COMMENT'}:
+                    next_index += 1
+                if next_index < len(self.tokens):
+                    token = self.tokens[next_index]
         return self.sql[token.start:token.end + 1]
 
     def identity(self, kind, *parts):
@@ -140,8 +151,12 @@ class DdlParser:
         return SqlType(name=name)
 
     def create_table(self, node):
+        if node.relation.catalogname:
+            self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Cross-database table reference', node.relation.location)
+            return
         if (node.relation.relpersistence != 'p' or node.inhRelations or node.partspec or node.ofTypename
-                or node.constraints or node.options or node.accessMethod or node.tablespacename
+                or node.constraints or node.nnconstraints or node.partbound or node.options or node.accessMethod or node.tablespacename
+                or node.relation.alias or not node.relation.inh
                 or node.if_not_exists or node.oncommit != enums.OnCommitAction.ONCOMMIT_NOOP):
             self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported CREATE TABLE option', self.statement_offset)
             return
@@ -162,7 +177,10 @@ class DdlParser:
             if element.colname in self.columns_by_table[table.table_id]:
                 self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate column', element.location, [table.table_id])
                 continue
-            if element.collClause or element.compression or element.fdwoptions or element.storage_name:
+            if (element.collClause or element.compression or element.fdwoptions or element.storage_name
+                    or element.inhcount or not element.is_local or element.is_not_null or element.is_from_type
+                    or element.storage != '\x00' or element.raw_default or element.cooked_default
+                    or element.identity != '\x00' or element.identitySequence or element.generated != '\x00'):
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported column option', element.location, [table.table_id])
             sql_type = self.type_of(element.typeName)
             if sql_type is None:
@@ -193,16 +211,26 @@ class DdlParser:
             self.add_constraint(table, foreign_key, column)
 
     def update_column(self, column, **changes):
-        updated = column.model_copy(update=changes)
-        self.columns[self.columns.index(column)] = updated
+        current = self.columns_by_table[column.table_id][column.name]
+        updated = current.model_copy(update=changes)
+        self.columns[self.columns.index(current)] = updated
         self.columns_by_table[column.table_id][column.name] = updated
         return updated
 
     def column_constraints(self, table, column, constraints, pending_foreign_keys):
         seen_default = False
         seen_identity = False
+        owner_kind = None
+        attribute_kinds = {enums.ConstrType.CONSTR_ATTR_DEFERRABLE, enums.ConstrType.CONSTR_ATTR_NOT_DEFERRABLE,
+                           enums.ConstrType.CONSTR_ATTR_DEFERRED, enums.ConstrType.CONSTR_ATTR_IMMEDIATE}
         for index, item in enumerate(constraints):
             kind = item.contype
+            if kind not in attribute_kinds:
+                owner_kind = kind
+                if (item.is_no_inherit and kind not in {enums.ConstrType.CONSTR_NOTNULL, enums.ConstrType.CONSTR_CHECK}):
+                    self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported column constraint option', item.location, [column.column_id])
+            elif owner_kind not in {enums.ConstrType.CONSTR_FOREIGN, enums.ConstrType.CONSTR_PRIMARY, enums.ConstrType.CONSTR_UNIQUE}:
+                self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported column constraint attribute', item.location, [column.column_id])
             if kind in {enums.ConstrType.CONSTR_FOREIGN, enums.ConstrType.CONSTR_PRIMARY, enums.ConstrType.CONSTR_UNIQUE}:
                 attributes = []
                 for following in constraints[index + 1:]:
@@ -219,7 +247,8 @@ class DdlParser:
                 item.deferrable = (enums.ConstrType.CONSTR_ATTR_DEFERRABLE in attributes or
                                    (item.initdeferred and not explicit_not_deferrable))
             if kind == enums.ConstrType.CONSTR_NOTNULL:
-                column = self.update_column(column, nullable=False)
+                self.add_constraint(table, item, column)
+                column = self.columns_by_table[column.table_id][column.name]
             elif kind == enums.ConstrType.CONSTR_NULL:
                 column = self.update_column(column, nullable=True)
             elif kind == enums.ConstrType.CONSTR_DEFAULT:
@@ -379,18 +408,24 @@ class DdlParser:
 
     def add_constraint(self, table, item, column=None):
         kinds = {enums.ConstrType.CONSTR_PRIMARY: 'primary_key', enums.ConstrType.CONSTR_UNIQUE: 'unique',
-                 enums.ConstrType.CONSTR_FOREIGN: 'foreign_key', enums.ConstrType.CONSTR_CHECK: 'check'}
+                 enums.ConstrType.CONSTR_FOREIGN: 'foreign_key', enums.ConstrType.CONSTR_CHECK: 'check',
+                 enums.ConstrType.CONSTR_NOTNULL: 'not_null'}
         kind = kinds.get(item.contype)
         if not kind:
             self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported constraint', item.location, [table.table_id])
             return
         if (item.skip_validation or item.is_no_inherit or item.nulls_not_distinct or item.including or item.options
-                or item.indexname or item.indexspace or item.without_overlaps
-                or (kind == 'check' and (item.deferrable or item.initdeferred or not item.is_enforced))):
+                or item.indexname or item.indexspace or item.without_overlaps or item.exclusions
+                or item.reset_default_tblspc or item.access_method or item.where_clause or item.cooked_expr or item.old_conpfeqop
+                or (kind in {'check', 'not_null'} and (item.deferrable or item.initdeferred))
+                or (kind == 'check' and not item.is_enforced)):
             self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported constraint option', item.location, [table.table_id])
             return
         source_names = ([column.name] if column else [x.sval for x in (item.fk_attrs if kind == 'foreign_key' else item.keys) or ()])
         columns = self.columns_by_table[table.table_id]
+        if kind == 'not_null' and len(source_names) != 1:
+            self.diagnose('DDL_UNRESOLVED_REFERENCE', 'NOT NULL requires one column', item.location, [table.table_id])
+            return
         if any(name not in columns for name in source_names):
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown constraint column', item.location, [table.table_id])
             return
@@ -412,6 +447,15 @@ class DdlParser:
                        expression=expression, deferrable=item.deferrable, initially_deferred=item.initdeferred,
                        location=self.location(item.location))
         if kind == 'foreign_key':
+            if item.pktable.catalogname:
+                self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Cross-database table reference', item.location, [table.table_id])
+                return
+            if item.pktable.alias or not item.pktable.inh or item.pktable.relpersistence != 'p':
+                self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported referenced table option', item.location, [table.table_id])
+                return
+            if item.fk_with_period or item.pk_with_period:
+                self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported PERIOD foreign key', item.location, [table.table_id])
+                return
             if item.fk_del_set_cols or item.skip_validation or not item.is_enforced:
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported foreign key option', item.location, [table.table_id])
                 return
@@ -442,11 +486,17 @@ class DdlParser:
                                            match=match, on_update=actions[item.fk_upd_action], on_delete=actions[item.fk_del_action],
                                            deferrable=c.deferrable, initially_deferred=c.initially_deferred))
         self.constraints.append(c)
-        if kind == 'primary_key':
+        if kind in {'primary_key', 'not_null'}:
             for name in source_names:
                 self.update_column(columns[name], nullable=False)
 
     def alter_table(self, node):
+        if node.relation.catalogname:
+            self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Cross-database table reference', node.relation.location)
+            return
+        if node.missing_ok or node.relation.alias or node.relation.relpersistence != 'p':
+            self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported ALTER TABLE option', self.statement_offset)
+            return
         if node.objtype != enums.ObjectType.OBJECT_TABLE:
             self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported ALTER object type', self.statement_offset)
             return
@@ -455,7 +505,12 @@ class DdlParser:
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown ALTER TABLE target', node.relation.location)
             return
         for command in node.cmds:
-            if command.subtype == enums.AlterTableType.AT_AddConstraint and isinstance(command.def_, ast.Constraint):
+            if (command.subtype == enums.AlterTableType.AT_AddConstraint
+                    and not (command.name or command.num or command.newowner or command.missing_ok or command.recurse)
+                    and command.behavior == enums.DropBehavior.DROP_RESTRICT
+                    and isinstance(command.def_, ast.Constraint)
+                    and command.def_.contype in {enums.ConstrType.CONSTR_PRIMARY, enums.ConstrType.CONSTR_UNIQUE,
+                                                 enums.ConstrType.CONSTR_FOREIGN, enums.ConstrType.CONSTR_CHECK}):
                 self.add_constraint(table, command.def_)
             else:
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported ALTER TABLE action', self.statement_offset, [table.table_id])

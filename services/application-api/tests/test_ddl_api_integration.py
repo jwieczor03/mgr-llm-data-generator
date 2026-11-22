@@ -659,3 +659,32 @@ def test_invalid_numeric_parameter_reaches_persisted_worker_checkpoint(client, d
 
     checkpoint = wait_for(read_checkpoint)
     assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == ['DDL_UNSUPPORTED_TYPE']
+
+
+@pytest.mark.parametrize(('data', 'expected_codes', 'expected_constraint'), [
+    (b'CREATE TABLE t(id int PRIMARY KEY DEFAULT 1, name text CONSTRAINT nn NOT NULL);', [], 'not_null'),
+    (b'CREATE TABLE t(id int);\x00CREATE VIEW v AS SELECT 1;', ['DDL_SYNTAX_ERROR'], None),
+])
+def test_parser_worker_persists_primary_key_not_null_and_nul(client, db, data, expected_codes, expected_constraint):
+    project = client.post('/api/v1/projects', json={'name': 'Parser checkpoint'}).json()['id']
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'/api/v1/projects/{project}/ddl-attempts/{attempt}'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(data)}]}).status_code == 201
+    uploaded = client.post(path + '/files', files=[('files', ('x.sql', data, 'application/sql'))],
+                           headers={'X-DDL-Page-ID': page})
+    assert uploaded.status_code == 201
+    nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
+
+    def read_checkpoint():
+        with db.session() as session:
+            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
+                                   {'id': uuid.UUID(attempt)}).scalar_one()
+
+    checkpoint = wait_for(read_checkpoint)
+    assert checkpoint['analysis_profile']['adapter_version'] == 'pglast-2'
+    assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == expected_codes
+    if expected_constraint:
+        constraint = next(c for c in checkpoint['parsed']['constraints'] if c['kind'] == expected_constraint)
+        assert constraint['name'] == 'nn'
+        assert checkpoint['parsed']['columns'][0]['default']['literal_value'] == '1'
