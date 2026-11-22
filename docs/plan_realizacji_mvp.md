@@ -1265,6 +1265,14 @@ kontraktów i konfiguracji S1. Powyższe testy są planowane, nie wykonane.
 
 #### S2-T3 — Dodać rozpoznawanie struktury i ograniczeń DDL
 
+**Stan implementacji:** parser `pglast==8.9` tworzy model pośredni
+i checkpoint workera dla profilu `postgres-mvp-v1`. Ocena obsługiwalności
+pozostaje w S2-T4, dlatego wynik pośredni nie jest publikowany jako końcowa
+analiza; worker kończy technicznie po istniejących ponowieniach. Aktualne
+ustalenia i ograniczenia opisuje [rejestr](ustalenia_architektoniczne.md).
+Poniższy szkic zachowuje historyczny punkt startowy zadania.
+
+
 **Status opisu:** szkic oparty na uzgodnionym zakresie,
 **do wyjaśnienia przed implementacją**.
 **Story nadrzędne:** S2 — Zapisane projekty i rozpoznawanie schematu.

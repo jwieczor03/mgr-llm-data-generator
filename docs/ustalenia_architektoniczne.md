@@ -2,11 +2,16 @@
 
 **Data:** 21 października 2026.
 
-**Aktualizacja:** 16 listopada 2026.
+**Aktualizacja:** 21 listopada 2026.
 
 **Status:** zapis dotychczasowych ustaleń i kierunków projektowych. Nie jest potwierdzeniem działania bibliotek ani zgodności konkretnych wersji.
 
 **Podstawa:** [specyfikacja MVP](specyfikacja_mvp.md), rozmowa o technologiach, adapterze LLM i przechowywaniu kontekstu.
+
+**Bieżąca decyzja parsera S2-T3:** użytkownik dopuścił `pglast==8.9`
+jako zamiennik SQLGlot po pozytywnej kwalifikacji pełnego profilu.
+[Warunki zmiany i granicę T3/T4](#s2-t3--zmiana-parsera-i-granica-wyniku-21-listopada-2026)
+opisano poniżej. Zgoda nie jest wynikiem kwalifikacji ani ręcznym odbiorem.
 
 **Stan implementacji S1-T3 — 16 listopada 2026:** dostarczono podstawowy
 Compose, obrazy backendów, podawanie frontendu przez API, sieci i wolumen
@@ -956,7 +961,7 @@ modyfikowanie DDL użytkownika.
 4. **OD-04–OD-06:** dokładny profil SQL/CSV, raport, wykonywalna postać reguł oraz ich prezentacja do zatwierdzenia.
 5. **OD-07–OD-09:** wartości timeoutów, szczegóły anulowania, dostępność niesprawdzonych artefaktów i fizyczne sprzątanie. W dostępnym czacie sprawdzoną paczkę można pobrać po anulowaniu lub błędzie bez zmiany statusu. Dostęp kończy się po nowym czacie, odświeżeniu lub zamknięciu strony i pełnym zamknięciu aplikacji; przed odświeżeniem lub zamknięciem strony wymagane jest ostrzeżenie (REQ-074–REQ-075). Opuszczenie czatu ma anulować trwające wykonanie (REQ-077). Otwarte pozostają techniczne wykrycie wyjścia, przekazanie anulowania i moment potwierdzenia zatrzymania, mechanizm zakończenia dostępu, sprzątanie oraz usuwanie projektów.
 6. **OD-10–OD-12:** uzgodniono czat, zmianę poprzedniej paczki przez LLM i osobny limit napraw dla każdej nowej prośby (REQ-033–REQ-034, REQ-073, REQ-076). Po nieudanej zmianie zachowujemy poprzednią paczkę, a dodatkowe 3 rundy wymagają ręcznej akcji (REQ-078–REQ-079). Nadal otwarte są przypisanie prośby i serii do wykonania oraz liczników, kontrakt plików i obsługa ograniczeń kontekstu oraz pozostałe szczegóły UI. Warianty badawcze, modele i sprzęt należą do osobnej pracy badawczej.
-7. Parser: SQLGlot jako pierwszy kandydat do próby; pglast tylko po ocenie zgodności i licencji.
+7. Parser S2: historyczny kierunek SQLGlot zastępuje warunkowa zgoda na pglast 8.9 z 21 listopada 2026, opisana [poniżej](#s2-t3--zmiana-parsera-i-granica-wyniku-21-listopada-2026). Wymagany jest dodatni wynik kwalifikacji; nie zmienia to zakresu DDL.
 8. Wykonawca długich operacji: ograniczony lokalny wykonawca za portem `ExecutionRunner`; gotowe narzędzie dopiero, jeśli zmniejszy nakład i spełni zasady braku retry i wznowień.
 9. Konkretne wersje języków, bibliotek i obrazów; pliki blokad oraz przegląd bezpieczeństwa i licencji.
 
@@ -1110,8 +1115,168 @@ monotonicznie, bez listy tokenów, drzewa składni ani kopii usuwających
 komentarze; koszt skanera jest liniowy, a pomocnicza pamięć stała. Walidacja
 treści działa poza pętlą zdarzeń przez `run_in_threadpool`. Ścisłe sprawdzenie
 UTF-8 nadal obejmuje cały plik; zbiorcza diagnostyka pozostaje bez zmian.
-Nie dodajemy zależności ani niższych limitów. SQLGlot pozostaje wybranym
-narzędziem analizy T3/T4. Decyzja zastępuje wcześniejszy wybór pełnej
+Nie dodajemy w T2 zależności ani niższych limitów. Na tym etapie SQLGlot
+pozostawał wybranym narzędziem analizy T3/T4; późniejszą warunkową zmianę
+parsera opisano poniżej. Decyzja zastępuje wcześniejszy wybór pełnej
 tokenizacji do wstępnej kontroli T2. Źródło:
 [PostgreSQL 18 — komentarze](https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-COMMENTS),
 sprawdzone 21 listopada 2026.
+
+### S2-T3 — zmiana parsera i granica wyniku, 21 listopada 2026
+
+Ta decyzja określa, jak dostarczyć rozpoznawanie DDL bez uznania samego
+parsowania za potwierdzenie obsługiwalności całego schematu. Podstawą jest
+[aktualny opis S2-T3, issue #27](https://github.com/jwieczor03/mgr-llm-data-generator/issues/27)
+oraz porty i checkpoint z S2-T2 opisane w tym rejestrze. Ustalenia
+dotyczące pełnego profilu `postgres-mvp-v1` w issue pozostają obowiązujące.
+
+#### Dlaczego zmieniamy parser
+
+**Sprawdzone przez wykonawcę:** SQLGlot 30.33.0 na Pythonie 3.14.6,
+z dialektem `postgres` i `ErrorLevel.RAISE`, nie przeszedł kwalifikacji.
+Wieloelementowe `SET search_path TO a, public` i wariant z `=` zwracają
+ogólny węzeł `Command`. Jawne `NOT DEFERRABLE` w ograniczeniach daje
+`ParseError` albo `Command`, zależnie od rodzaju instrukcji. Dotyczy to
+także `NOT DEFERRABLE INITIALLY IMMEDIATE`. Są to wymagane konstrukcje;
+nie wolno ich pomijać, przepisywać wejścia ani zastępować własną gramatyką.
+Szczegółowy wynik kwalifikacji i stan realizacji zapisano w issue #27.
+To testy biblioteki, nie gotowego adaptera ani próbnego importu.
+
+**Zgoda użytkownika:** po przedstawieniu ograniczeń i informacji
+o licencji GPL-3.0-or-later użytkownik dopuścił `pglast==8.9` jako
+zamiennik SQLGlot, pod warunkiem przejścia pełnej kwalifikacji. Nie trzeba
+ponownie pytać o samo zastąpienie po spełnieniu tego warunku. Zgoda
+zastępuje wcześniejszy wybór SQLGlot dla parsera T3; nie zmniejsza zakresu
+produktu i nie jest deklaracją zgodności licencji całego projektu.
+
+**Wytyczne architekta w delegowanym procesie:** najpierw kwalifikujemy
+pglast 8.9 na pełnej macierzy z issue #27, bez zmiany zależności
+produkcyjnych przed wynikiem. Po dodatnim wyniku przypinamy tę wersję
+w pliku zależności i locku. Nie zastępujemy jej po cichu inną wersją.
+Nowe braki wracają do architekta z odtwarzalnym dowodem.
+Kwalifikacja obejmuje struktury i atrybuty DDL, odrzucanie konstrukcji
+spoza profilu, BOM/CRLF/UTF-8, mapowanie pozycji, instrukcje rozłożone
+na pliki oraz działanie biblioteki w izolowanym workerze. Przed ukończeniem
+T3 trzeba także zmierzyć czas i szczyt pamięci dla paczki 500 tabel.
+Nie wykonujemy DDL w bazie aplikacji. Semantykę rzeczywistego importu
+sprawdza później S7; samo drzewo parsera jej nie potwierdza.
+
+**Źródła sprawdzone 21 listopada 2026:**
+[SQLGlot 30.33.0 — ostatnie opublikowane wydanie i MIT](https://pypi.org/project/sqlglot/30.33.0/),
+[pglast 8.9 — GPL-3.0-or-later i Python 3.14](https://pypi.org/project/pglast/8.9/),
+[zmiany pglast — seria 8 dla PostgreSQL 18](https://pglast.readthedocs.io/en/latest/changes.html).
+Pglast udostępnia drzewo parsera PostgreSQL przez libpg_query; deklaracje
+pakietu uzasadniają próbę, lecz nie zastępują powyższej kwalifikacji.
+
+#### Własny model wyrażeń
+
+**Ustalone przez architekta:** model aplikacji pozostaje niezależny od
+klas biblioteki. `Expression` otrzymuje opcjonalne `column_id: UUID`
+oraz `target_type: SqlType`. Operacja `op="column"` wskazuje rozwiązany
+identyfikator kolumny z tej samej wersji schematu; nie używa nazwy jako
+zamiennika identyfikatora. Jawne rzutowanie zachowuje docelowy typ
+w `target_type`, razem z jego parametrami. Fragment źródłowy pozostaje
+w `original`. Literały liczbowe przechowujemy jako tekst z oznaczeniem
+typu, bez konwersji przez binarne liczby zmiennoprzecinkowe.
+
+Nieobsługiwane wyrażenie pozostaje jako `op="unsupported"` z oryginalnym
+fragmentem oraz diagnostyką `DDL_UNSUPPORTED_EXPRESSION` i wiarygodną
+lokalizacją, jeśli można ją ustalić. Nie serializujemy obcego AST,
+nie wykonujemy wyrażenia i nie pomijamy go bez śladu. Nieznany atrybut
+lub nierozwiązane odwołanie także pozostawia odpowiednią diagnostykę;
+nie tworzymy fikcyjnego identyfikatora ani pozornie poprawnego ograniczenia.
+Znacznik `unsupported` nie jest operacją dopuszczoną do generowania
+czy walidacji danych.
+
+#### Odraczalność ograniczeń
+
+PK, UNIQUE i FK zachowują w `Constraint` pola `deferrable` oraz
+`initially_deferred`, niezależnie od deklaracji kolumnowej, tabelowej lub
+`ALTER`. Dla FK te same wartości przechowuje też `Relation`. T3 zapisuje
+składnię; jej semantykę i wykonalność sprawdzają T4 i S7. CHECK i NOT NULL
+nie zyskują obsługi odraczania. Podstawa: [CREATE TABLE PostgreSQL 18](https://www.postgresql.org/docs/18/sql-createtable.html).
+
+#### Jawne NOT NULL i oryginalna nazwa tabeli
+
+Jawne kolumnowe i tabelowe `NOT NULL` ma w modelu ograniczenie `not_null`
+z identyfikatorem kolumny i opcjonalną nazwą oraz ustawia `nullable=False`.
+Nie tworzymy takiego ograniczenia dla niejawnej niepustości wynikającej
+z PK lub IDENTITY. `ALTER ... ADD CONSTRAINT` zachowuje zakres profilu:
+PK, FK, UNIQUE i CHECK. Oryginalna nazwa tabeli to niekwalifikowany token,
+z oryginalnymi cudzysłowami; nazwa schematu pozostaje osobnym polem.
+Komentarze między składnikami nazwy pomija skaner PostgreSQL.
+
+Rozszerzenie modelu wymaga profilu adaptera `pglast-2`. Checkpoint profilu
+`pglast-1` nie pasuje do nowego profilu i nie jest ponownie używany.
+
+#### Zakres oryginalnych wyrażeń
+
+Skaner `pglast.parser.scan` i granice `RawStmt` wskazują fragment źródła;
+nie używamy odtworzonego SQL jako oryginału. Dla CHECK granicę wyznaczają
+zrównoważone nawiasy wskazane skanerem, dla DEFAULT granice wynikają
+z tokenów oraz sąsiednich węzłów AST. Skaner nie interpretuje wyrażeń.
+Gdy nie można wiarygodnie ustalić końca, zachowujemy całą instrukcję z
+`original_scope="statement"`; dokładny fragment ma `original_scope="expression"`.
+Lokalizację podajemy tylko wtedy, gdy jej początek jest wiarygodny.
+
+#### Stałe DEFAULT i zgodność typów
+
+T3 rozpoznaje dozwoloną składnię stałych, NULL, CURRENT_DATE,
+CURRENT_TIMESTAMP i rzutowania na typ z profilu. Zachowuje ich strukturę,
+a nie implementuje silnika konwersji PostgreSQL ani nie stosuje macierzy
+reguł S3. Literał napisowy otrzymuje typ z kontekstu PostgreSQL; nie jest
+zawsze jawnym `text`. Dlatego T3 nie odrzuca m.in. `'abc'::uuid`, dużej
+liczby, `1::smallint` dla integer, CURRENT_DATE dla timestamp ani NULL dla
+NOT NULL. Ograniczenia wartości, zakresów i zgodności sprawdzi T4 w zakresie
+możliwym bez wykonywania DDL, a rozstrzygający import PostgreSQL należy do S7.
+Rozpoznanie nie gwarantuje poprawności wartości. Niedozwolone funkcje,
+odwołania do kolumn i rzutowania poza profil nadal otrzymują diagnostykę.
+
+Podstawa: [konwersje typów PostgreSQL 18](https://www.postgresql.org/docs/18/typeconv-overview.html)
+i [wartości domyślne PostgreSQL 18](https://www.postgresql.org/docs/18/ddl-default.html).
+
+#### Przekazanie T3 do T2 bez gotowego T4
+
+**Ustalone przez architekta:** T3 zwraca `ParsedSchema` i diagnostykę
+rozpoznawania. Worker zapisuje kompletny wynik T3 jako istniejący checkpoint.
+T4 osobno tworzy końcowy `SchemaAnalysis` i rozstrzyga `supported`, w tym
+obsługiwalność zależności. Sam wynik T3 nie daje `SUCCEEDED`, nie trafia
+do odczytu jako końcowa analiza i nie zmienia wersji domyślnej.
+
+Dopóki implementacja T4 nie istnieje, produkcyjny worker po parsowaniu
+i checkpoint kończy dotychczasowym technicznym `DDL_ANALYZER_UNAVAILABLE`.
+Nie udaje błędnego DDL ani sukcesu. Obowiązują istniejące najwyżej cztery
+uruchomienia i zakończenie `FAILED_TECHNICAL`; kolejne uruchomienie może
+ominąć parser tylko przy zgodnym checkpoint. Dzięki temu T3 dostarcza
+rzeczywistą integrację z T2, ale nie przejmuje zakresu T4. Testowe
+powiązanie etapu T4 służy wyłącznie sprawdzeniu kontraktu przekazania.
+
+Działający adapter i zmieniony model dostają nowy `adapter_version`,
+odrębny od `unavailable-1`. Profil zachowuje rzeczywistą przypiętą wersję
+biblioteki i docelowy PostgreSQL 18. Checkpoint musi pasować do całego
+profilu, wersji DDL i manifestu; starych checkpointów ani zapisanych
+wersji nie przepisujemy automatycznie na nowy profil. Zmiany modelu
+trzeba uwzględnić w testach serializacji, hasha i wznowienia.
+
+**Wynik kwalifikacji:** pglast 8.9 na Pythonie 3.14.6 używa parsera
+PostgreSQL 18.6. Próby biblioteki, obejmujące macierz konstrukcji, pozycje
+i uruchomienie w izolowanym workerze, zakończyły się wynikiem 82/82.
+Testy adaptera w `services/application-api/tests/test_ddl_parser.py` osobno
+sprawdzają model, źródło i macierze atrybutów FK/PK/UNIQUE; integracja API
+sprawdza rzeczywisty checkpoint i ponowienie. Pglast nie potwierdza semantyki
+importu. Dla paczki T2 z 10 plików (141726 bajtów), 500 tabel i 499 relacji
+pomiar rzeczywistego workera na macOS z profilem `pglast-2` dał 5,811 s
+i szczyt RSS procesu potomnego 69582848 bajtów; wynik jest pomiarem, nie progiem ani gwarancją.
+Z katalogu głównego repozytorium, po instalacji zależności `application-api`,
+próby można odtworzyć poleceniami:
+
+```sh
+services/application-api/.venv/bin/python services/application-api/qualification/pglast_8_9.py
+services/application-api/.venv/bin/python services/application-api/qualification/adapter_500.py
+```
+
+Drugi pomiar obejmuje proces workera i utworzenie checkpointu, nie T4 ani S7;
+jednostka `ru_maxrss` jest zależna od systemu operacyjnego.
+
+**Stan:** parser i checkpoint są zaimplementowane; T4 i S7 pozostają do
+wykonania. Ręczny odbiór użytkownika jest osobnym krokiem.

@@ -66,15 +66,24 @@ def test_upload_ack_retries_and_cancel(client, db):
     assert client.post(path + "/receipt", json={"page_id": page, "receipt_nonce": nonce}).json()["schema_version_id"] == version
     assert client.get(f"{root}/schema-versions/{version}/files/" + client.get(f"{root}/schema-versions/{version}").json()["files"][0]["id"]).content == data
 
+    checkpoints = []
+
     def advance():
         state = client.get(path).json()
         if state["status"] == "RETRY_WAIT":
             with db.session() as session:
+                checkpoint = session.execute(text("SELECT checkpoint FROM app.ddl_attempts WHERE id=:id"),
+                                             {"id": uuid.UUID(attempt)}).scalar_one()
+                assert checkpoint is not None
+                assert checkpoint["parsed"]["tables"][0]["name"] == "t"
+                assert checkpoint["analysis_profile"]["library_version"] == "8.9"
+                checkpoints.append(checkpoint)
                 session.execute(text("UPDATE app.ddl_attempts SET next_attempt_at=now() WHERE id=:id"), {"id": uuid.UUID(attempt)})
         return state if state["status"] == "FAILED_TECHNICAL" else None
 
     terminal = wait_for(advance)
     assert terminal["launch_count"] == 4
+    assert checkpoints and all(item == checkpoints[0] for item in checkpoints)
     repeated_upload = client.post(path + "/files", files=[("files", ("a.sql", data))],
                                   headers={"X-DDL-Page-ID": page})
     assert repeated_upload.status_code == 409
@@ -629,3 +638,83 @@ def test_slow_content_validation_does_not_block_other_api_requests(client, monke
     asyncio.run(scenario())
     assert client.post(path + "/cancel", json={"page_id": page}).status_code == 202
     wait_for(lambda: client.get(path).json().get("status") == "CANCELLED")
+
+
+def test_invalid_numeric_parameter_reaches_persisted_worker_checkpoint(client, db):
+    project = client.post('/api/v1/projects', json={'name': 'Invalid numeric'}).json()['id']
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'/api/v1/projects/{project}/ddl-attempts/{attempt}'
+    data = b'CREATE TABLE t(a numeric(-1));'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(data)}]}).status_code == 201
+    uploaded = client.post(path + '/files', files=[('files', ('x.sql', data, 'application/sql'))],
+                           headers={'X-DDL-Page-ID': page})
+    assert uploaded.status_code == 201
+    nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
+
+    def read_checkpoint():
+        with db.session() as session:
+            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
+                                   {'id': uuid.UUID(attempt)}).scalar_one()
+
+    checkpoint = wait_for(read_checkpoint)
+    assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == ['DDL_UNSUPPORTED_TYPE']
+
+
+@pytest.mark.parametrize(('data', 'expected_codes', 'expected_constraint'), [
+    (b'CREATE TABLE t(id int PRIMARY KEY DEFAULT 1, name text CONSTRAINT nn NOT NULL);', [], 'not_null'),
+    (b'CREATE TABLE t(id int);\x00CREATE VIEW v AS SELECT 1;', ['DDL_SYNTAX_ERROR'], None),
+])
+def test_parser_worker_persists_primary_key_not_null_and_nul(client, db, data, expected_codes, expected_constraint):
+    project = client.post('/api/v1/projects', json={'name': 'Parser checkpoint'}).json()['id']
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'/api/v1/projects/{project}/ddl-attempts/{attempt}'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(data)}]}).status_code == 201
+    uploaded = client.post(path + '/files', files=[('files', ('x.sql', data, 'application/sql'))],
+                           headers={'X-DDL-Page-ID': page})
+    assert uploaded.status_code == 201
+    nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
+
+    def read_checkpoint():
+        with db.session() as session:
+            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
+                                   {'id': uuid.UUID(attempt)}).scalar_one()
+
+    checkpoint = wait_for(read_checkpoint)
+    assert checkpoint['analysis_profile']['adapter_version'] == 'pglast-2'
+    assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == expected_codes
+    if expected_constraint:
+        constraint = next(c for c in checkpoint['parsed']['constraints'] if c['kind'] == expected_constraint)
+        assert constraint['name'] == 'nn'
+        assert checkpoint['parsed']['columns'][0]['default']['literal_value'] == '1'
+
+
+@pytest.mark.parametrize(('data', 'kind'), [
+    (b'CREATE TABLE t (PRIMARY KEY(id), id int NULL);', 'primary_key'),
+    (b'CREATE TABLE t (id int NULL, PRIMARY KEY(id));', 'primary_key'),
+    (b'CREATE TABLE t (NOT NULL id, id int NULL);', 'not_null'),
+    (b'CREATE TABLE t (id int NULL, NOT NULL id);', 'not_null'),
+])
+def test_checkpoint_required_column_is_independent_of_table_constraint_order(client, db, data, kind):
+    project = client.post('/api/v1/projects', json={'name': 'Required column'}).json()['id']
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'/api/v1/projects/{project}/ddl-attempts/{attempt}'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(data)}]}).status_code == 201
+    uploaded = client.post(path + '/files', files=[('files', ('x.sql', data, 'application/sql'))],
+                           headers={'X-DDL-Page-ID': page})
+    assert uploaded.status_code == 201
+    nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
+
+    def read_checkpoint():
+        with db.session() as session:
+            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
+                                   {'id': uuid.UUID(attempt)}).scalar_one()
+
+    checkpoint = wait_for(read_checkpoint)
+    parsed = checkpoint['parsed']
+    assert parsed['diagnostics'] == []
+    assert not parsed['columns'][0]['nullable']
+    constraint = next(c for c in parsed['constraints'] if c['kind'] == kind)
+    assert constraint['column_ids'] == [parsed['columns'][0]['column_id']]

@@ -49,6 +49,13 @@ class DdlBundle(Contract):
     files: list[ManifestFile]
 
 
+def manifest_digest(files: list[ManifestFile]) -> str:
+    manifest = [{'id': str(file.file_id), 'position': file.position, 'name': file.name,
+                 'size_bytes': file.size_bytes, 'sha256': file.sha256, 'artifact_id': str(file.artifact_id)}
+                for file in files]
+    return hashlib.sha256(canonical_json(manifest)).hexdigest()
+
+
 class SqlType(Contract):
     name: str
     length: int | None = Field(default=None, ge=0)
@@ -62,6 +69,9 @@ class Expression(Contract):
     literal_type: str | None = None
     literal_value: str | None = None
     original: str | None = None
+    original_scope: Literal["expression", "statement"] | None = None
+    column_id: UUID | None = None
+    target_type: SqlType | None = None
 
 
 class Table(Contract):
@@ -88,10 +98,12 @@ class Column(Contract):
 class Constraint(Contract):
     constraint_id: UUID
     table_id: UUID
-    kind: Literal["primary_key", "unique", "foreign_key", "check"]
+    kind: Literal["primary_key", "unique", "foreign_key", "check", "not_null"]
     column_ids: list[UUID]
     name: str | None = None
     expression: Expression | None = None
+    deferrable: bool = False
+    initially_deferred: bool = False
     location: SourceLocation | None = None
 
 
