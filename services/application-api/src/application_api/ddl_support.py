@@ -116,16 +116,25 @@ _NUMERIC_INPUT = re.compile(rf'[+-]?(?:{_DIGITS}(?:\.(?:{_DIGITS})?)?|\.{_DIGITS
 
 def parse_number(value, kind, target_name):
     text = value.strip()
-    if kind == 'string':
-        if _BASE_INPUT.fullmatch(text):
-            return Decimal(int(text.replace('_', ''), 0))
-        if target_name in {'smallint', 'integer', 'bigint'}:
-            if not _INTEGER_INPUT.fullmatch(text):
-                raise ValueError('invalid integer input')
-        elif not _NUMERIC_INPUT.fullmatch(text):
-            if text.lower() not in {'nan', 'inf', '+inf', '-inf', 'infinity', '+infinity', '-infinity'}:
-                raise ValueError('invalid numeric input')
-    number = Decimal(text.replace('_', ''))
+    if _BASE_INPUT.fullmatch(text):
+        normalized = text.replace('_', '')
+        unsigned = normalized.lstrip('+-')
+        bits_per_digit = {'b': 1, 'o': 3, 'x': 4}[unsigned[1].lower()]
+        significant = unsigned[2:].lstrip('0')
+        # 3.322 is an upper bound for log2(10), so this only rejects definite overflow.
+        max_digits = 131072 * 3322 // (1000 * bits_per_digit) + 2
+        if len(significant) > max_digits:
+            raise ValueError('numeric value exceeds PostgreSQL limits')
+        number = Decimal(int(normalized, 0))
+    else:
+        if kind == 'string':
+            if target_name in {'smallint', 'integer', 'bigint'}:
+                if not _INTEGER_INPUT.fullmatch(text):
+                    raise ValueError('invalid integer input')
+            elif not _NUMERIC_INPUT.fullmatch(text):
+                if text.lower() not in {'nan', 'inf', '+inf', '-inf', 'infinity', '+infinity', '-infinity'}:
+                    raise ValueError('invalid numeric input')
+        number = Decimal(text.replace('_', ''))
     if number.is_finite():
         # PostgreSQL numeric stores at most 131072 integral and 16383 fractional digits.
         if (not number.is_zero() and number.adjusted() >= 131072) or number.as_tuple().exponent < -16383:

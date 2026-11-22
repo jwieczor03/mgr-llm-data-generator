@@ -114,6 +114,12 @@ def test_deferred_nullable_three_table_cycle_still_blocks():
 
 
 @pytest.mark.parametrize(('sql', 'supported', 'code'), [
+    ('CREATE TABLE t(a bigint DEFAULT 0x80000000);', True, None),
+    ('CREATE TABLE t(a numeric DEFAULT 0x8000000000000000);', True, None),
+    ('CREATE TABLE t(a bigint DEFAULT 0b10000000000000000000000000000000);', True, None),
+    ('CREATE TABLE t(a bigint DEFAULT 0o20000000000);', True, None),
+    ('CREATE TABLE t(a bigint DEFAULT 0x8000000000000000);', False, 'DDL_UNSUPPORTED_EXPRESSION'),
+    ('CREATE TABLE t(a numeric(3,0) DEFAULT 0x100000000);', False, 'DDL_UNSUPPORTED_EXPRESSION'),
     ('CREATE TABLE t(a numeric(30,0) DEFAULT 1e1000000);', False, 'DDL_UNSUPPORTED_EXPRESSION'),
     ('CREATE TABLE t(a numeric DEFAULT 1e1000000);', False, 'DDL_UNSUPPORTED_EXPRESSION'),
     ("CREATE TABLE t(a numeric DEFAULT 'sNaN');", False, 'DDL_UNSUPPORTED_EXPRESSION'),
@@ -175,3 +181,17 @@ def test_alter_foreign_key_can_use_key_in_same_statement(key):
 def test_numeric_literals_follow_postgres_18_limits(type_name, value, supported):
     result = analyze(f'CREATE TABLE t(a {type_name} DEFAULT {value});')
     assert result.supported == supported, result.diagnostics
+
+
+@pytest.mark.parametrize(('prefix', 'digit', 'count'), [('0x', 'f', 109000), ('0o', '7', 146000), ('0b', '1', 436000)])
+def test_excessive_base_literal_is_rejected_before_integer_conversion(prefix, digit, count):
+    from application_api.ddl_support import parse_number
+
+    with pytest.raises(ValueError, match='numeric value exceeds'):
+        parse_number(prefix + digit * count, 'numeric', 'numeric')
+
+
+def test_leading_zeroes_do_not_count_towards_numeric_base_limit():
+    from application_api.ddl_support import parse_number
+
+    assert parse_number('0x' + '0' * 109000 + 'ff', 'numeric', 'numeric') == 255
