@@ -297,13 +297,13 @@ def test_ddl_upload_runs_worker_in_real_api_container(stack: Stack):
     deadline = time.monotonic() + 40
     while time.monotonic() < deadline:
         state = call(path)
-        if state["status"] == "FAILED_TECHNICAL":
+        if state["status"] == "REJECTED_DDL":
             break
         time.sleep(.25)
     else:
         pytest.fail("worker did not reach terminal status")
-    assert state["launch_count"] == 4
-    assert state["diagnostics"][0]["code"] == "DDL_ANALYZER_UNAVAILABLE"
+    assert state["launch_count"] == 1
+    assert state["diagnostics"][0]["code"] == "DDL_UNSUPPORTED_STATEMENT"
     files = call(f"/api/v1/projects/{project}/schema-versions/{version}")["files"]
     with urlopen(base + f"/api/v1/projects/{project}/schema-versions/{version}/files/{files[0]['id']}", timeout=10) as response:
         assert response.read() == b"SELECT 1"

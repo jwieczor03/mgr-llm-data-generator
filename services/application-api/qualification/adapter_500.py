@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="s2-t3-500-") as tmp:
         and len(ck["relations"]) == 499
         and len(ck["diagnostics"]) == 0
     ), (len(ck["tables"]), len(ck["relations"]), ck["diagnostics"][:2])
-    assert result.messages[1]["code"] == "DDL_ANALYZER_UNAVAILABLE"
+    assert result.messages[1]["type"] == "result" and result.messages[1]["analysis"]["supported"]
     print(
         f"files={len(files)} bytes={sum(map(len, contents))} tables={len(ck['tables'])} columns={len(ck['columns'])} constraints={len(ck['constraints'])} relations={len(ck['relations'])} seconds={elapsed:.3f} child_peak_rss_platform_units={resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss}"
     )

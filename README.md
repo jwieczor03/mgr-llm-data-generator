@@ -77,13 +77,12 @@ projekcie. Wysyłanie wymaga rezerwacji i dodatkowego potwierdzenia odbioru;
 status można sprawdzać bez ponownego przesyłania. Jedna operacja DDL zajmuje
 wspólny slot aplikacji aż do jej zakończenia lub posprzątania.
 
-**Ograniczenie:** parser S2-T3 rozpoznaje strukturę paczki przez pglast i
-zapisuje wynik pośredni. Ocena obsługiwalności S2-T4 nie jest jeszcze
-zaimplementowana. Po zapisaniu wyniku pośredniego worker zgłasza
-`DDL_ANALYZER_UNAVAILABLE`; po czterech uruchomieniach kończy jako
-`FAILED_TECHNICAL`. Przyjęta wersja i oryginały pozostają dostępne, ale nie
-powstaje poprawna analiza ani nowa wersja domyślna. Interfejs przesyłania
-w przeglądarce należy do S2-T6.
+Parser pglast rozpoznaje strukturę, a analiza S2-T4 sprawdza obsługiwalność
+schematu i zależności. Poprawna wersja otrzymuje `SUCCEEDED` i staje się
+domyślną dla nowych zleceń. Nieobsługiwany lub błędny DDL otrzymuje
+`REJECTED_DDL` z diagnostyką; oryginalne pliki i wcześniejsza wersja domyślna
+pozostają dostępne. Nie wykonujemy przesłanego DDL w bazie aplikacji;
+próbny import należy do S7. Interfejs przesyłania należy do S2-T6.
 
 Opcjonalne ustawienia `application-api` to `DDL_MAX_FILES` (domyślnie 1024),
 `DDL_MAX_TOTAL_BYTES` i `DDL_MAX_FILE_BYTES` (oba 67108864),
@@ -106,11 +105,13 @@ Ręczna kontrola API po uruchomieniu Compose:
 4. Wyślij `POST .../receipt` z JSON `{"page_id":"UUID-strony",
    "receipt_nonce":"wartość-z-STAGED"}`. Oczekuj 202 i identyfikatora wersji.
    Powtórzenie tego ACK zwraca ten sam identyfikator. Późniejszy `GET` próby
-   nie wymaga nagłówka strony i po ponowieniach pokaże `FAILED_TECHNICAL`.
+   nie wymaga nagłówka strony i pokaże `SUCCEEDED` lub `REJECTED_DDL`.
 5. `GET .../schema-versions` pokazuje wersję i jej manifest. Przez
    `GET .../schema-versions/{version_id}/files/{file_id}` pobierz oryginalne
-   bajty; `/analysis` zwraca 409, ponieważ ocena T4 i końcowa analiza
-   nie są jeszcze dostępne.
+   bajty; `/analysis` zwraca wynik oraz diagnostykę po zakończeniu analizy.
+   Prześlij kolejno poprawny `CREATE TABLE t(id int);` i osobną paczkę
+   `CREATE TABLE t(payload jsonb);`: druga powinna zostać odrzucona,
+   a wcześniejsza poprawna wersja pozostać domyślną.
    Osobna próba `POST .../cancel` wymaga `page_id` przed ACK; po skutecznym
    sprzątaniu ma stan `CANCELLED` i nie tworzy wersji.
 

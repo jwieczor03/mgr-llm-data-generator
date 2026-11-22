@@ -1278,5 +1278,24 @@ services/application-api/.venv/bin/python services/application-api/qualification
 Drugi pomiar obejmuje proces workera i utworzenie checkpointu, nie T4 ani S7;
 jednostka `ru_maxrss` jest zależna od systemu operacyjnego.
 
-**Stan:** parser i checkpoint są zaimplementowane; T4 i S7 pozostają do
-wykonania. Ręczny odbiór użytkownika jest osobnym krokiem.
+**Stan:** parser i checkpoint są zaimplementowane. T4 opisano poniżej; S7
+pozostaje do wykonania. Ręczny odbiór użytkownika jest osobnym krokiem.
+
+
+### S2-T4 — ocena obsługiwalności, 22 listopada 2026
+
+**Ustalone przez architekta w delegowanym zakresie:** T4 zachowuje model i
+diagnostykę parsera, po czym sprawdza klucze docelowe, wartości DEFAULT
+i graf jawnych relacji. Cykl między różnymi tabelami blokuje wersję również
+w przypadku NULL lub odraczalnego FK. Jeden FK do tej samej tabeli wymaga
+możliwości utworzenia korzenia: dla MATCH SIMPLE wystarcza jedna kolumna
+dopuszczająca NULL, dla MATCH FULL wszystkie. Wiele FK do siebie w jednej
+tabeli jest poza tym wyjątkiem. FK wskazuje nieodraczalny PK lub UNIQUE
+obejmujący dokładnie wskazane kolumny. Sprawdzamy rozpoznawalne stałe
+DEFAULT pod kątem zakresu liczb, UUID i długości varchar; pozostałą semantykę
+PostgreSQL oraz próbny import rozstrzyga S7. Paczka bez tabel jest odrzucana.
+
+Nowe wersje otrzymują profil `pglast-3`. Aktywne wersje `pglast-2`
+pozostają na swoim profilu, lecz checkpoint formatu 1 jest odrzucany
+i odtwarzany z oryginalnych plików jako format 2. Publikowany kontrakt
+analizy pozostaje w wersji 1. Wersji zakończonych nie przepisujemy.

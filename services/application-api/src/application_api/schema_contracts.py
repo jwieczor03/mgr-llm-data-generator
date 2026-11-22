@@ -91,6 +91,7 @@ class Column(Contract):
     type: SqlType
     nullable: bool
     default: Expression | None = None
+    default_location: SourceLocation | None = None
     automatic_id: str | None = None
     location: SourceLocation | None = None
 
@@ -136,7 +137,7 @@ class SchemaAnalysis(ParsedSchema):
     @model_validator(mode="after")
     def diagnostics_match_result(self):
         errors = any(item.severity == "error" for item in self.diagnostics)
-        if (self.supported and errors) or (not self.supported and not self.diagnostics):
+        if self.supported == errors:
             raise ValueError("supported must agree with error diagnostics")
         return self
 
@@ -146,7 +147,7 @@ def canonical_json(value) -> bytes:
 
 
 class Checkpoint(Contract):
-    contract_version: Literal[1]
+    contract_version: Literal[1, 2]
     schema_version_id: UUID
     manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     analysis_profile: AnalysisProfile
@@ -154,7 +155,8 @@ class Checkpoint(Contract):
     model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     def valid_for(self, bundle: DdlBundle, profile: AnalysisProfile) -> bool:
-        return (self.schema_version_id == bundle.schema_version_id
+        return (self.contract_version == 2
+                and self.schema_version_id == bundle.schema_version_id
                 and self.manifest_hash == bundle.manifest_hash
                 and self.analysis_profile == profile
                 and self.parsed.schema_version_id == bundle.schema_version_id
@@ -188,7 +190,7 @@ class StagedDdlAnalyzer:
             if parsed.schema_version_id != bundle.schema_version_id:
                 raise ValueError("parser returned a different schema version")
             model_hash = hashlib.sha256(canonical_json(parsed.model_dump(mode="json"))).hexdigest()
-            self.save(Checkpoint(contract_version=1, schema_version_id=bundle.schema_version_id,
+            self.save(Checkpoint(contract_version=2, schema_version_id=bundle.schema_version_id,
                                  manifest_hash=bundle.manifest_hash, analysis_profile=profile,
                                  parsed=parsed, model_hash=model_hash))
         result = self.support.diagnose(parsed, profile)

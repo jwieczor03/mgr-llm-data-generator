@@ -15,7 +15,7 @@ def adapter(request, emit):
         return {"type": "error", "code": "MISSING_CHECKPOINT"}
     parsed = {"schema_version_id": bundle["schema_version_id"], "tables": [], "columns": [],
               "constraints": [], "relations": [], "diagnostics": []}
-    checkpoint = {"contract_version": 1, "schema_version_id": bundle["schema_version_id"],
+    checkpoint = {"contract_version": 2, "schema_version_id": bundle["schema_version_id"],
                   "manifest_hash": bundle["manifest_hash"], "analysis_profile": profile, "parsed": parsed,
                   "model_hash": hashlib.sha256(canonical_json(parsed)).hexdigest()}
     emit({"type": "checkpoint", "checkpoint": checkpoint})

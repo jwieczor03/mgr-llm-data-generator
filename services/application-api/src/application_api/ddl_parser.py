@@ -274,7 +274,7 @@ class DdlParser:
                     self.diagnose('DDL_UNSUPPORTED_EXPRESSION', 'Unsupported or incompatible DEFAULT', item.location, [column.column_id])
                     expression = expression.model_copy(update={'op': 'unsupported', 'original': self.statement_original,
                                                                'original_scope': 'statement'})
-                column = self.update_column(column, default=expression)
+                column = self.update_column(column, default=expression, default_location=self.default_location(item))
             elif kind == enums.ConstrType.CONSTR_IDENTITY:
                 if seen_identity:
                     self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Duplicate IDENTITY', item.location, [column.column_id])
@@ -291,6 +291,15 @@ class DdlParser:
             elif kind not in {enums.ConstrType.CONSTR_ATTR_DEFERRABLE, enums.ConstrType.CONSTR_ATTR_NOT_DEFERRABLE,
                               enums.ConstrType.CONSTR_ATTR_DEFERRED, enums.ConstrType.CONSTR_ATTR_IMMEDIATE}:
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported column constraint', item.location, [column.column_id])
+
+    def default_location(self, constraint):
+        start = bisect_left(self.token_starts, constraint.location)
+        for token in self.tokens[start:]:
+            if token.name == 'DEFAULT':
+                return self.location(token.start)
+            if token.name in {'ASCII_44', 'ASCII_59'}:
+                break
+        return None
 
     def valid_check(self, expression):
         if expression.op in {'current_date', 'current_timestamp', 'unsupported'}:
@@ -404,6 +413,8 @@ class DdlParser:
             if op:
                 return Expression(op=op, args=[self.convert_expression(x, table) for x in node.args])
         if isinstance(node, ast.A_Expr):
+            if node.name and len(node.name) != 1:
+                raise ValueError('qualified operator')
             kind = node.kind
             if kind == enums.A_Expr_Kind.AEXPR_OP:
                 op = node.name[0].sval
@@ -438,6 +449,12 @@ class DdlParser:
         columns = self.columns_by_table[table.table_id]
         if kind == 'not_null' and len(source_names) != 1:
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'NOT NULL requires one column', item.location, [table.table_id])
+            return
+        if kind in {'primary_key', 'unique', 'foreign_key'} and len(source_names) != len(set(source_names)):
+            self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate key column', item.location, [table.table_id])
+            return
+        if kind == 'primary_key' and any(c.table_id == table.table_id and c.kind == 'primary_key' for c in self.constraints):
+            self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate primary key', item.location, [table.table_id])
             return
         if any(name not in columns for name in source_names):
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown constraint column', item.location, [table.table_id])
@@ -478,6 +495,9 @@ class DdlParser:
                 return
             target_columns = self.columns_by_table[target.table_id]
             target_names = [x.sval for x in item.pk_attrs or ()]
+            if len(target_names) != len(set(target_names)):
+                self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate referenced column', item.location, [table.table_id])
+                return
             if not target_names:
                 primary = next((x for x in self.constraints if x.table_id == target.table_id and x.kind == 'primary_key'), None)
                 target_ids = primary.column_ids if primary else []

@@ -66,31 +66,16 @@ def test_upload_ack_retries_and_cancel(client, db):
     assert client.post(path + "/receipt", json={"page_id": page, "receipt_nonce": nonce}).json()["schema_version_id"] == version
     assert client.get(f"{root}/schema-versions/{version}/files/" + client.get(f"{root}/schema-versions/{version}").json()["files"][0]["id"]).content == data
 
-    checkpoints = []
-
-    def advance():
-        state = client.get(path).json()
-        if state["status"] == "RETRY_WAIT":
-            with db.session() as session:
-                checkpoint = session.execute(text("SELECT checkpoint FROM app.ddl_attempts WHERE id=:id"),
-                                             {"id": uuid.UUID(attempt)}).scalar_one()
-                assert checkpoint is not None
-                assert checkpoint["parsed"]["tables"][0]["name"] == "t"
-                assert checkpoint["analysis_profile"]["library_version"] == "8.9"
-                checkpoints.append(checkpoint)
-                session.execute(text("UPDATE app.ddl_attempts SET next_attempt_at=now() WHERE id=:id"), {"id": uuid.UUID(attempt)})
-        return state if state["status"] == "FAILED_TECHNICAL" else None
-
-    terminal = wait_for(advance)
-    assert terminal["launch_count"] == 4
-    assert checkpoints and all(item == checkpoints[0] for item in checkpoints)
+    terminal = wait_for(lambda: (state if (state := client.get(path).json())["status"] == "SUCCEEDED" else None))
+    assert terminal["launch_count"] == 1
+    assert client.get(f"{root}/schema-versions/{version}/analysis").json()["supported"] is True
     repeated_upload = client.post(path + "/files", files=[("files", ("a.sql", data))],
                                   headers={"X-DDL-Page-ID": page})
     assert repeated_upload.status_code == 409
     assert repeated_upload.json()["error"]["code"] == "DDL_UPLOAD_ALREADY_RECEIVED"
     assert repeated_upload.json()["error"]["details"]["status_url"] == path
     assert client.post(path + "/receipt", json={"page_id": page, "receipt_nonce": nonce}).json()["schema_version_id"] == version
-    assert client.get(f"{root}/schema-versions/{version}/analysis").status_code == 409
+    assert client.get(f"{root}/schema-versions/{version}/analysis").status_code == 200
     attempt2, page2 = str(uuid.uuid4()), str(uuid.uuid4())
     path2 = f"{root}/ddl-attempts/{attempt2}"
     assert client.put(path2, json={"page_id": page2, "files": [{"name": "b.sql", "size_bytes": 1}]}).status_code == 201
@@ -386,14 +371,7 @@ def test_sigkill_api_at_journal_file_and_ack(client, db, postgres, phase):
                 assert client.get(root + "/schema-versions").json()["items"] == []
                 assert list((app.state.ddl_runtime.parent / "project").iterdir()) == []
             else:
-                def terminal():
-                    state = client.get(path).json()
-                    if state["status"] == "RETRY_WAIT":
-                        with db.session() as session:
-                            session.execute(text("UPDATE app.ddl_attempts SET next_attempt_at=now() WHERE id=:id"),
-                                            {"id": uuid.UUID(attempt)})
-                    return state if state["status"] == "FAILED_TECHNICAL" else None
-                state = wait_for(terminal)
+                state = wait_for(lambda: (state if (state := client.get(path).json())["status"] == "REJECTED_DDL" else None))
                 version = state["schema_version_id"]
                 manifest = client.get(f"{root}/schema-versions/{version}").json()["files"]
                 assert client.get(f"{root}/schema-versions/{version}/files/{manifest[0]['id']}").content == b"SELECT 1"
@@ -652,12 +630,9 @@ def test_invalid_numeric_parameter_reaches_persisted_worker_checkpoint(client, d
     nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
     assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
 
-    def read_checkpoint():
-        with db.session() as session:
-            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
-                                   {'id': uuid.UUID(attempt)}).scalar_one()
-
-    checkpoint = wait_for(read_checkpoint)
+    state = wait_for(lambda: (state if (state := client.get(path).json())['status'] in {'SUCCEEDED', 'REJECTED_DDL'} else None))
+    analysis = client.get(f"/api/v1/projects/{project}/schema-versions/{state['schema_version_id']}/analysis").json()
+    checkpoint = {'parsed': analysis, 'analysis_profile': analysis['analysis_profile']}
     assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == ['DDL_UNSUPPORTED_TYPE']
 
 
@@ -676,13 +651,10 @@ def test_parser_worker_persists_primary_key_not_null_and_nul(client, db, data, e
     nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
     assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
 
-    def read_checkpoint():
-        with db.session() as session:
-            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
-                                   {'id': uuid.UUID(attempt)}).scalar_one()
-
-    checkpoint = wait_for(read_checkpoint)
-    assert checkpoint['analysis_profile']['adapter_version'] == 'pglast-2'
+    state = wait_for(lambda: (state if (state := client.get(path).json())['status'] in {'SUCCEEDED', 'REJECTED_DDL'} else None))
+    analysis = client.get(f"/api/v1/projects/{project}/schema-versions/{state['schema_version_id']}/analysis").json()
+    checkpoint = {'parsed': analysis, 'analysis_profile': analysis['analysis_profile']}
+    assert checkpoint['analysis_profile']['adapter_version'] == 'pglast-3'
     assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == expected_codes
     if expected_constraint:
         constraint = next(c for c in checkpoint['parsed']['constraints'] if c['kind'] == expected_constraint)
@@ -707,14 +679,71 @@ def test_checkpoint_required_column_is_independent_of_table_constraint_order(cli
     nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
     assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
 
-    def read_checkpoint():
-        with db.session() as session:
-            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
-                                   {'id': uuid.UUID(attempt)}).scalar_one()
-
-    checkpoint = wait_for(read_checkpoint)
+    state = wait_for(lambda: (state if (state := client.get(path).json())['status'] in {'SUCCEEDED', 'REJECTED_DDL'} else None))
+    analysis = client.get(f"/api/v1/projects/{project}/schema-versions/{state['schema_version_id']}/analysis").json()
+    checkpoint = {'parsed': analysis, 'analysis_profile': analysis['analysis_profile']}
     parsed = checkpoint['parsed']
     assert parsed['diagnostics'] == []
     assert not parsed['columns'][0]['nullable']
     constraint = next(c for c in parsed['constraints'] if c['kind'] == kind)
     assert constraint['column_ids'] == [parsed['columns'][0]['column_id']]
+
+
+def test_production_analysis_preserves_default_and_original_files(client, db):
+    project = client.post('/api/v1/projects', json={'name': 'Real analysis'}).json()['id']
+    root = f'/api/v1/projects/{project}'
+
+    def upload(files):
+        attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+        path = f'{root}/ddl-attempts/{attempt}'
+        meta = [{'name': name, 'size_bytes': len(data)} for name, data in files]
+        assert client.put(path, json={'page_id': page, 'files': meta}).status_code == 201
+        staged = client.post(path + '/files', files=[('files', (name, data)) for name, data in files],
+                             headers={'X-DDL-Page-ID': page})
+        assert staged.status_code == 201
+        ack = client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': staged.json()['receipt_nonce']})
+        version = ack.json()['schema_version_id']
+        state = wait_for(lambda: (s if (s := client.get(path).json())['status'] in {'SUCCEEDED', 'REJECTED_DDL'} else None))
+        assert state['launch_count'] == 1
+        response = client.get(f'{root}/schema-versions/{version}/analysis')
+        assert response.status_code == 200
+        manifest = client.get(f'{root}/schema-versions/{version}').json()['files']
+        for item, (_, content) in zip(manifest, files):
+            assert client.get(f"{root}/schema-versions/{version}/files/{item['id']}").content == content
+        return version, state, response.json(), manifest
+
+    first, state, analysis, _ = upload([('a.sql', b'CREATE TABLE a(id int PRIMARY KEY);')])
+    assert state['status'] == 'SUCCEEDED' and analysis['supported']
+    second, state, analysis, files = upload([('a.sql', b'CREATE TABLE a(id int);'),
+                                             ('b.sql', b'\xef\xbb\xbf-- comment\r\nCREATE TABLE b(data jsonb);')])
+    assert second != first and state['status'] == 'REJECTED_DDL' and not analysis['supported']
+    diagnostic = next(d for d in analysis['diagnostics'] if d['code'] == 'DDL_UNSUPPORTED_TYPE')
+    assert diagnostic['location']['file_id'] == files[1]['id'] and diagnostic['location']['line'] == 2
+    with db.session() as session:
+        assert str(session.execute(text('SELECT default_schema_version_id FROM app.projects WHERE id=:id'),
+                                   {'id': uuid.UUID(project)}).scalar_one()) == first
+    _, state, analysis, _ = upload([('c.sql', b'CREATE TABLE c(id int);')])
+    assert state['status'] == 'SUCCEEDED' and analysis['supported']
+
+
+@pytest.mark.parametrize(('sql', 'code'), [
+    (b'CREATE TABLE t(id int', 'DDL_SYNTAX_ERROR'),
+    (b'CREATE TABLE t(id int REFERENCES missing(id));', 'DDL_UNRESOLVED_REFERENCE'),
+    (b'CREATE TABLE t(id jsonb);', 'DDL_UNSUPPORTED_TYPE'),
+    (b'CREATE TABLE a(id int PRIMARY KEY); CREATE TABLE b(id int PRIMARY KEY, a int REFERENCES a(id)); ALTER TABLE a ADD FOREIGN KEY(id) REFERENCES b(id);', 'DDL_UNSUPPORTED_CYCLE'),
+])
+def test_initial_content_rejection_is_terminal_without_default(client, db, sql, code):
+    project = client.post('/api/v1/projects', json={'name': 'Rejected DDL'}).json()['id']
+    root = f'/api/v1/projects/{project}'
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'{root}/ddl-attempts/{attempt}'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(sql)}]}).status_code == 201
+    staged = client.post(path + '/files', files={'files': ('x.sql', sql)}, headers={'X-DDL-Page-ID': page})
+    version = client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': staged.json()['receipt_nonce']}).json()['schema_version_id']
+    state = wait_for(lambda: (s if (s := client.get(path).json())['status'] == 'REJECTED_DDL' else None))
+    assert state['launch_count'] == 1
+    analysis = client.get(f'{root}/schema-versions/{version}/analysis').json()
+    assert not analysis['supported'] and code in [d['code'] for d in analysis['diagnostics']]
+    with db.session() as session:
+        assert session.execute(text('SELECT default_schema_version_id FROM app.projects WHERE id=:id'),
+                               {'id': uuid.UUID(project)}).scalar_one() is None
