@@ -1299,3 +1299,12 @@ Nowe wersje otrzymują profil `pglast-3`. Aktywne wersje `pglast-2`
 pozostają na swoim profilu, lecz checkpoint formatu 1 jest odrzucany
 i odtwarzany z oryginalnych plików jako format 2. Publikowany kontrakt
 analizy pozostaje w wersji 1. Wersji zakończonych nie przepisujemy.
+
+
+**Doprecyzowanie po review S2-T4:** klucz docelowy FK musi istnieć
+w chwili deklaracji relacji; klucze zadeklarowane później nie naprawiają
+wcześniejszego REFERENCES. W jednej instrukcji CREATE TABLE oraz wieloakcyjnym ALTER TABLE klucze
+tabeli są dostępne dla jej FK niezależnie od kolejności ich zapisu. REFERENCES
+bez listy kolumn wskazuje klucz główny, który nie może być odraczalny;
+inny UNIQUE go nie zastępuje. Parametry numeric podlegają zakresowi
+PostgreSQL, a sprawdzenie wartości zachowuje dokładność dziesiętną.

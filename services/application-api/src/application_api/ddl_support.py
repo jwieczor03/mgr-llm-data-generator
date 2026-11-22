@@ -18,17 +18,6 @@ class DdlSupport:
 
         if not parsed.tables and not any(d.severity == 'error' for d in diagnostics):
             error('DDL_UNSUPPORTED_STATEMENT', 'The bundle contains no tables')
-        keys = {}
-        for c in parsed.constraints:
-            if c.kind in {'primary_key', 'unique'} and not c.deferrable:
-                keys.setdefault(c.table_id, set()).add(frozenset(c.column_ids))
-        for relation in parsed.relations:
-            target = [pair[1] for pair in relation.column_pairs]
-            if frozenset(target) not in keys.get(relation.target_table_id, set()):
-                c = constraints[relation.constraint_id]
-                error('DDL_UNRESOLVED_REFERENCE', 'Foreign key requires a non-deferrable target key',
-                      [c.constraint_id], c.location)
-
         for column in parsed.columns:
             if column.default and not valid_default_value(column.default, column.type):
                 error('DDL_UNSUPPORTED_EXPRESSION', 'DEFAULT value is invalid for its type',
@@ -118,21 +107,45 @@ def valid_default_value(expression, column_type):
     return convert_literal(literal_value, literal_type, column_type, explicit=False) is not False
 
 
+# PostgreSQL accepts separators only between digits (or immediately after a base prefix).
+_DIGITS = r'[0-9]+(?:_[0-9]+)*'
+_INTEGER_INPUT = re.compile(rf'[+-]?{_DIGITS}')
+_BASE_INPUT = re.compile(r'[+-]?0(?:[xX]_?[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*|[oO]_?[0-7]+(?:_[0-7]+)*|[bB]_?[01]+(?:_[01]+)*)')
+_NUMERIC_INPUT = re.compile(rf'[+-]?(?:{_DIGITS}(?:\.(?:{_DIGITS})?)?|\.{_DIGITS})(?:[eE][+-]?{_DIGITS})?')
+
+
+def parse_number(value, kind, target_name):
+    text = value.strip()
+    if kind == 'string':
+        if _BASE_INPUT.fullmatch(text):
+            return Decimal(int(text.replace('_', ''), 0))
+        if target_name in {'smallint', 'integer', 'bigint'}:
+            if not _INTEGER_INPUT.fullmatch(text):
+                raise ValueError('invalid integer input')
+        elif not _NUMERIC_INPUT.fullmatch(text):
+            if text.lower() not in {'nan', 'inf', '+inf', '-inf', 'infinity', '+infinity', '-infinity'}:
+                raise ValueError('invalid numeric input')
+    number = Decimal(text.replace('_', ''))
+    if number.is_finite():
+        # PostgreSQL numeric stores at most 131072 integral and 16383 fractional digits.
+        if (not number.is_zero() and number.adjusted() >= 131072) or number.as_tuple().exponent < -16383:
+            raise ValueError('numeric value exceeds PostgreSQL limits')
+    return number
+
+
 def convert_literal(value, kind, target, explicit):
     if kind == 'null':
         return None
     name = target.name
     if name in {'smallint', 'integer', 'bigint', 'numeric'} and kind in {'integer', 'numeric', 'string'}:
         try:
-            number = Decimal(value.strip())
+            number = parse_number(value, kind, name)
             if not number.is_finite():
                 if name == 'numeric' and (number.is_nan() or target.precision is None):
                     return value, 'numeric'
                 return False
             if name in {'smallint', 'integer', 'bigint'}:
-                # String literals use integer input syntax; numeric casts round half away from zero.
-                if kind == 'string' and not re.fullmatch(r'[+-]?\d+', value.strip()):
-                    return False
+                # Numeric casts round half away from zero.
                 number = number.to_integral_value(rounding=ROUND_HALF_UP)
                 bits = {'smallint': 16, 'integer': 32, 'bigint': 64}[name]
                 if not -(2 ** (bits - 1)) <= number < 2 ** (bits - 1):
@@ -140,19 +153,19 @@ def convert_literal(value, kind, target, explicit):
                 return str(number), 'integer'
             if target.precision is not None:
                 scale = target.scale or 0
-                limit = Decimal(10) ** (target.precision - scale)
-                if abs(number) >= limit:
+                limit = Decimal((0, (1,), target.precision - scale))
+                if number.copy_abs() >= limit:
                     return False
                 with localcontext() as context:
                     context.prec = target.precision + abs(scale) + 4
                     number = number.quantize(Decimal(1).scaleb(-scale), rounding=ROUND_HALF_UP)
-                if abs(number) >= limit:
+                if number.copy_abs() >= limit:
                     return False
             return str(number), 'numeric'
         except (InvalidOperation, ValueError, OverflowError):
             return False
     if name == 'uuid' and kind == 'string':
-        text = value.strip()
+        text = value
         if text.startswith('{') and text.endswith('}'):
             text = text[1:-1]
         parts = text.split('-')

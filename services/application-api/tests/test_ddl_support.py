@@ -111,3 +111,67 @@ def test_deferred_nullable_three_table_cycle_still_blocks():
     ''')
     diagnostic = next(d for d in result.diagnostics if d.code == 'DDL_UNSUPPORTED_CYCLE')
     assert len(diagnostic.object_ids) == 3
+
+
+@pytest.mark.parametrize(('sql', 'supported', 'code'), [
+    ('CREATE TABLE t(a numeric(30,0) DEFAULT 1e1000000);', False, 'DDL_UNSUPPORTED_EXPRESSION'),
+    ('CREATE TABLE t(a numeric DEFAULT 1e1000000);', False, 'DDL_UNSUPPORTED_EXPRESSION'),
+    ("CREATE TABLE t(a numeric DEFAULT 'sNaN');", False, 'DDL_UNSUPPORTED_EXPRESSION'),
+    ("CREATE TABLE t(a integer DEFAULT '0xFF');", True, None),
+    ('CREATE TABLE t(a numeric(1000000,0) DEFAULT 1);', False, 'DDL_UNSUPPORTED_TYPE'),
+    ('CREATE TABLE t(a numeric(30,0) DEFAULT 999999999999999999999999999999);', True, None),
+    ("CREATE TABLE t(a uuid DEFAULT ' 00000000-0000-0000-0000-000000000001 ');", False, 'DDL_UNSUPPORTED_EXPRESSION'),
+    ('CREATE TABLE a(id int); CREATE TABLE b(id int REFERENCES a(id)); ALTER TABLE a ADD UNIQUE(id);', False, 'DDL_UNRESOLVED_REFERENCE'),
+    ('CREATE TABLE a(id int PRIMARY KEY DEFERRABLE, UNIQUE(id)); CREATE TABLE b(id int REFERENCES a);', False, 'DDL_UNRESOLVED_REFERENCE'),
+    ('CREATE TABLE a(id int, parent int, FOREIGN KEY(parent) REFERENCES a(id), PRIMARY KEY(id));', True, None),
+])
+def test_review_regressions_through_production_worker(tmp_path, sql, supported, code):
+    import base64
+
+    from application_api.ddl_process import WorkerProcess
+    from test_ddl_parser import bundle_for
+
+    content = sql.encode()
+    bundle = bundle_for(content)
+    request = {'bundle': bundle.model_dump(mode='json'), 'profile': PROFILE.model_dump(mode='json'),
+               'files_base64': [base64.b64encode(content).decode()], 'checkpoint': None}
+    outcome = WorkerProcess(tmp_path).run(request)
+    assert outcome.error is None
+    result = outcome.messages[-1]
+    assert result['type'] == 'result'
+    assert result['analysis']['supported'] == supported
+    if code:
+        assert code in [item['code'] for item in result['analysis']['diagnostics']]
+
+
+def test_default_error_location_in_second_file():
+    bundle, parsed = parse(b'CREATE TABLE t(id int, v int CONSTRAINT named',
+                           b'\xef\xbb\xbf/* comment */\r\nDEFAULT id);')
+    diagnostic = next(d for d in parsed.diagnostics if d.code == 'DDL_UNSUPPORTED_EXPRESSION')
+    assert diagnostic.location.file_id == bundle.files[1].file_id
+    assert diagnostic.location.line == 2
+    assert diagnostic.location.column == 1
+
+
+@pytest.mark.parametrize('key', ['UNIQUE(id)', 'PRIMARY KEY(id)'])
+def test_alter_foreign_key_can_use_key_in_same_statement(key):
+    reference = 't(id)' if key.startswith('UNIQUE') else 't'
+    result = analyze('CREATE TABLE t(id int, parent int); '
+                     f'ALTER TABLE t ADD FOREIGN KEY(parent) REFERENCES {reference}, ADD {key};')
+    assert result.supported, result.diagnostics
+
+
+@pytest.mark.parametrize(('type_name', 'value', 'supported'), [
+    ('integer', "'0xFF'", True), ('integer', "'-0xFF'", True),
+    ('integer', "'1_000'", True), ('integer', "'0b101'", True),
+    ('integer', "'0o77'", True), ('integer', "'0x_FF'", True),
+    ('integer', "'1__0'", False), ('integer', "'1_'", False),
+    ('numeric', "'0xFF'", True), ('numeric', "'1_000'", True),
+    ('numeric', "'1_2.3_4e+1_0'", True), ('numeric', "'sNaN'", False),
+    ('numeric', '1e1000000', False), ('numeric', '1e-1000000', False),
+    ('numeric', '1e131071', True), ('numeric', '1e131072', False),
+    ('numeric', '1e-16383', True), ('numeric', '1e-16384', False),
+])
+def test_numeric_literals_follow_postgres_18_limits(type_name, value, supported):
+    result = analyze(f'CREATE TABLE t(a {type_name} DEFAULT {value});')
+    assert result.supported == supported, result.diagnostics

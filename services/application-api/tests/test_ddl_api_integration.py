@@ -730,6 +730,9 @@ def test_production_analysis_preserves_default_and_original_files(client, db):
     (b'CREATE TABLE t(id int', 'DDL_SYNTAX_ERROR'),
     (b'CREATE TABLE t(id int REFERENCES missing(id));', 'DDL_UNRESOLVED_REFERENCE'),
     (b'CREATE TABLE t(id jsonb);', 'DDL_UNSUPPORTED_TYPE'),
+    (b'CREATE TABLE t(a numeric(30,0) DEFAULT 1e1000000);', 'DDL_UNSUPPORTED_EXPRESSION'),
+    (b'CREATE TABLE t(a numeric DEFAULT 1e1000000);', 'DDL_UNSUPPORTED_EXPRESSION'),
+    (b'CREATE TABLE t(a numeric(1000000,0) DEFAULT 1);', 'DDL_UNSUPPORTED_TYPE'),
     (b'CREATE TABLE a(id int PRIMARY KEY); CREATE TABLE b(id int PRIMARY KEY, a int REFERENCES a(id)); ALTER TABLE a ADD FOREIGN KEY(id) REFERENCES b(id);', 'DDL_UNSUPPORTED_CYCLE'),
 ])
 def test_initial_content_rejection_is_terminal_without_default(client, db, sql, code):
