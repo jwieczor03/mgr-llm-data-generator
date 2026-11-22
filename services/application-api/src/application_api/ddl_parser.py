@@ -129,6 +129,8 @@ class DdlParser:
         params = [p.val.ival for p in node.typmods or () if isinstance(p, ast.A_Const) and isinstance(p.val, ast.Integer)]
         if node.typmods and len(params) != len(node.typmods):
             return None
+        if params and params[0] < 0:
+            return None
         if name == 'varchar' and len(params) == 1:
             return SqlType(name=name, length=params[0])
         if name == 'numeric' and 1 <= len(params) <= 2:
@@ -160,7 +162,7 @@ class DdlParser:
             if element.colname in self.columns_by_table[table.table_id]:
                 self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate column', element.location, [table.table_id])
                 continue
-            if element.collClause or element.compression or element.fdwoptions:
+            if element.collClause or element.compression or element.fdwoptions or element.storage_name:
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported column option', element.location, [table.table_id])
             sql_type = self.type_of(element.typeName)
             if sql_type is None:
@@ -197,6 +199,8 @@ class DdlParser:
         return updated
 
     def column_constraints(self, table, column, constraints, pending_foreign_keys):
+        seen_default = False
+        seen_identity = False
         for index, item in enumerate(constraints):
             kind = item.contype
             if kind in {enums.ConstrType.CONSTR_FOREIGN, enums.ConstrType.CONSTR_PRIMARY, enums.ConstrType.CONSTR_UNIQUE}:
@@ -208,19 +212,32 @@ class DdlParser:
                                                  enums.ConstrType.CONSTR_ATTR_IMMEDIATE}:
                         break
                     attributes.append(following.contype)
-                item.deferrable = enums.ConstrType.CONSTR_ATTR_DEFERRABLE in attributes
                 item.initdeferred = enums.ConstrType.CONSTR_ATTR_DEFERRED in attributes
+                explicit_not_deferrable = enums.ConstrType.CONSTR_ATTR_NOT_DEFERRABLE in attributes
+                if item.initdeferred and explicit_not_deferrable:
+                    self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Conflicting constraint deferral', item.location, [column.column_id])
+                item.deferrable = (enums.ConstrType.CONSTR_ATTR_DEFERRABLE in attributes or
+                                   (item.initdeferred and not explicit_not_deferrable))
             if kind == enums.ConstrType.CONSTR_NOTNULL:
                 column = self.update_column(column, nullable=False)
             elif kind == enums.ConstrType.CONSTR_NULL:
                 column = self.update_column(column, nullable=True)
             elif kind == enums.ConstrType.CONSTR_DEFAULT:
+                if seen_default:
+                    self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Duplicate DEFAULT', item.location, [column.column_id])
+                    continue
+                seen_default = True
                 expression = self.expression(item.raw_expr, table, item)
                 if not self.valid_default(expression):
                     self.diagnose('DDL_UNSUPPORTED_EXPRESSION', 'Unsupported or incompatible DEFAULT', item.location, [column.column_id])
-                    expression = expression.model_copy(update={'op': 'unsupported'})
+                    expression = expression.model_copy(update={'op': 'unsupported', 'original': self.statement_original,
+                                                               'original_scope': 'statement'})
                 column = self.update_column(column, default=expression)
             elif kind == enums.ConstrType.CONSTR_IDENTITY:
+                if seen_identity:
+                    self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Duplicate IDENTITY', item.location, [column.column_id])
+                    continue
+                seen_identity = True
                 if item.options:
                     self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported IDENTITY options', item.location, [column.column_id])
                 column = self.update_column(column, automatic_id='identity_always' if item.generated_when == 'a' else 'identity_by_default', nullable=False)
@@ -295,7 +312,10 @@ class DdlParser:
         except (ValueError, TypeError, AttributeError):
             self.diagnose('DDL_UNSUPPORTED_EXPRESSION', 'Unsupported expression', getattr(node, 'location', None), [table.table_id])
             expr = Expression(op='unsupported')
-        original, scope = self.original_expression(constraint)
+        if constraint.contype == enums.ConstrType.CONSTR_DEFAULT and expr.op == 'unsupported':
+            original, scope = self.statement_original, 'statement'
+        else:
+            original, scope = self.original_expression(constraint)
         return expr.model_copy(update={'original': original, 'original_scope': scope})
 
     def convert_expression(self, node, table):
@@ -365,8 +385,10 @@ class DdlParser:
             self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported constraint', item.location, [table.table_id])
             return
         if (item.skip_validation or item.is_no_inherit or item.nulls_not_distinct or item.including or item.options
+                or item.indexname or item.indexspace or item.without_overlaps
                 or (kind == 'check' and (item.deferrable or item.initdeferred or not item.is_enforced))):
             self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported constraint option', item.location, [table.table_id])
+            return
         source_names = ([column.name] if column else [x.sval for x in (item.fk_attrs if kind == 'foreign_key' else item.keys) or ()])
         columns = self.columns_by_table[table.table_id]
         if any(name not in columns for name in source_names):
@@ -403,7 +425,10 @@ class DdlParser:
                 primary = next((x for x in self.constraints if x.table_id == target.table_id and x.kind == 'primary_key'), None)
                 target_ids = primary.column_ids if primary else []
             else:
-                target_ids = [target_columns[n].column_id for n in target_names if n in target_columns]
+                if len(target_names) != len(source_names) or any(name not in target_columns for name in target_names):
+                    self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown referenced columns', item.location, [table.table_id, target.table_id])
+                    return
+                target_ids = [target_columns[name].column_id for name in target_names]
             if len(target_ids) != len(source_names) or not target_ids:
                 self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown referenced columns', item.location, [table.table_id, target.table_id])
                 return
@@ -422,6 +447,9 @@ class DdlParser:
                 self.update_column(columns[name], nullable=False)
 
     def alter_table(self, node):
+        if node.objtype != enums.ObjectType.OBJECT_TABLE:
+            self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported ALTER object type', self.statement_offset)
+            return
         table = self.resolve(node.relation)
         if table is None:
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown ALTER TABLE target', node.relation.location)

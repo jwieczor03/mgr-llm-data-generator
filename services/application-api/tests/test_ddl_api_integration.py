@@ -638,3 +638,24 @@ def test_slow_content_validation_does_not_block_other_api_requests(client, monke
     asyncio.run(scenario())
     assert client.post(path + "/cancel", json={"page_id": page}).status_code == 202
     wait_for(lambda: client.get(path).json().get("status") == "CANCELLED")
+
+
+def test_invalid_numeric_parameter_reaches_persisted_worker_checkpoint(client, db):
+    project = client.post('/api/v1/projects', json={'name': 'Invalid numeric'}).json()['id']
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'/api/v1/projects/{project}/ddl-attempts/{attempt}'
+    data = b'CREATE TABLE t(a numeric(-1));'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(data)}]}).status_code == 201
+    uploaded = client.post(path + '/files', files=[('files', ('x.sql', data, 'application/sql'))],
+                           headers={'X-DDL-Page-ID': page})
+    assert uploaded.status_code == 201
+    nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
+
+    def read_checkpoint():
+        with db.session() as session:
+            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
+                                   {'id': uuid.UUID(attempt)}).scalar_one()
+
+    checkpoint = wait_for(read_checkpoint)
+    assert [item['code'] for item in checkpoint['parsed']['diagnostics']] == ['DDL_UNSUPPORTED_TYPE']
