@@ -62,13 +62,13 @@ def test_worker_checkpoint_and_resume():
     request = {'bundle': bundle.model_dump(mode='json'), 'profile': PROFILE.model_dump(mode='json'),
                'files_base64': [base64.b64encode(content).decode()], 'checkpoint': None}
     messages = []
-    assert analyze(request, messages.append)['code'] == 'DDL_ANALYZER_UNAVAILABLE'
+    assert analyze(request, messages.append)['analysis']['supported']
     assert len(messages) == 1
     checkpoint = Checkpoint.model_validate(messages[0]['checkpoint'])
     assert checkpoint.valid_for(bundle, PROFILE)
     request['checkpoint'] = messages[0]['checkpoint']
     messages.clear()
-    assert analyze(request, messages.append)['code'] == 'DDL_ANALYZER_UNAVAILABLE'
+    assert analyze(request, messages.append)['analysis']['supported']
     assert messages == []
 
 
@@ -322,11 +322,11 @@ def test_invalid_numeric_precision_produces_real_worker_checkpoint(tmp_path):
                'files_base64': [base64.b64encode(content).decode()], 'checkpoint': None}
     outcome = WorkerProcess(tmp_path).run(request)
     assert outcome.error is None
-    assert [message['type'] for message in outcome.messages] == ['checkpoint', 'error']
+    assert [message['type'] for message in outcome.messages] == ['checkpoint', 'result']
     checkpoint = Checkpoint.model_validate(outcome.messages[0]['checkpoint'])
     assert checkpoint.valid_for(bundle, PROFILE)
     assert [diagnostic.code for diagnostic in checkpoint.parsed.diagnostics] == ['DDL_UNSUPPORTED_TYPE']
-    assert outcome.messages[1]['code'] == 'DDL_ANALYZER_UNAVAILABLE'
+    assert not outcome.messages[1]['analysis']['supported']
 
 
 def test_conflicting_not_deferrable_initially_deferred_is_diagnosed():
@@ -401,7 +401,7 @@ def test_worker_persists_checkpoint_for_primary_key_and_nul(tmp_path, sql, diagn
                'files_base64': [base64.b64encode(sql).decode()], 'checkpoint': None}
     outcome = WorkerProcess(tmp_path).run(request)
     assert outcome.error is None
-    assert [message['type'] for message in outcome.messages] == ['checkpoint', 'error']
+    assert [message['type'] for message in outcome.messages] == ['checkpoint', 'result']
     checkpoint = Checkpoint.model_validate(outcome.messages[0]['checkpoint'])
     assert checkpoint.valid_for(bundle, PROFILE)
     assert [item.code for item in checkpoint.parsed.diagnostics] == diagnostics
@@ -469,7 +469,7 @@ def test_worker_does_not_reuse_previous_adapter_checkpoint():
     analyze(request, messages.append)
     result = Checkpoint.model_validate(messages[0]['checkpoint'])
     assert result.valid_for(bundle, PROFILE)
-    assert result.analysis_profile.adapter_version == 'pglast-2'
+    assert result.analysis_profile.adapter_version == 'pglast-3'
     assert [constraint.kind for constraint in result.parsed.constraints] == ['not_null']
     assert Checkpoint.model_validate_json(result.model_dump_json()) == result
     request['profile']['adapter_version'] = 'pglast-1'
@@ -565,4 +565,26 @@ def test_worker_checkpoint_keeps_required_columns_independent_of_order(tmp_path,
     assert checkpoint.valid_for(bundle, PROFILE)
     assert checkpoint.parsed.diagnostics == []
     assert not checkpoint.parsed.columns[0].nullable
-    assert outcome.messages[-1]['code'] == 'DDL_ANALYZER_UNAVAILABLE'
+    assert outcome.messages[-1]['analysis']['supported']
+
+
+def test_old_checkpoint_is_reparsed_for_old_active_profile():
+    content = b'CREATE TABLE t(id int DEFAULT 1);'
+    bundle = bundle_for(content)
+    profile = PROFILE.model_copy(update={'adapter_version': 'pglast-2'})
+    request = {'bundle': bundle.model_dump(mode='json'), 'profile': profile.model_dump(mode='json'),
+               'files_base64': [base64.b64encode(content).decode()], 'checkpoint': None}
+    messages = []
+    analyze(request, messages.append)
+    old = messages[0]['checkpoint']
+    old['contract_version'] = 1
+    request['checkpoint'] = old
+    messages.clear()
+    result = analyze(request, messages.append)
+    assert result['analysis']['supported']
+    assert messages[0]['checkpoint']['contract_version'] == 2
+    assert messages[0]['checkpoint']['analysis_profile']['adapter_version'] == 'pglast-2'
+    request['checkpoint'] = messages[0]['checkpoint']
+    messages.clear()
+    assert analyze(request, messages.append)['analysis']['supported']
+    assert messages == []

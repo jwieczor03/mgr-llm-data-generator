@@ -145,6 +145,8 @@ class DdlParser:
         if name == 'varchar' and len(params) == 1:
             return SqlType(name=name, length=params[0])
         if name == 'numeric' and 1 <= len(params) <= 2:
+            if not 1 <= params[0] <= 1000 or (len(params) == 2 and not -1000 <= params[1] <= 1000):
+                return None
             return SqlType(name=name, precision=params[0], scale=params[1] if len(params) == 2 else 0)
         if params:
             return None
@@ -271,10 +273,10 @@ class DdlParser:
                 seen_default = True
                 expression = self.expression(item.raw_expr, table, item)
                 if not self.valid_default(expression):
-                    self.diagnose('DDL_UNSUPPORTED_EXPRESSION', 'Unsupported or incompatible DEFAULT', item.location, [column.column_id])
+                    self.diagnose('DDL_UNSUPPORTED_EXPRESSION', 'Unsupported or incompatible DEFAULT', self.default_offset(item), [column.column_id])
                     expression = expression.model_copy(update={'op': 'unsupported', 'original': self.statement_original,
                                                                'original_scope': 'statement'})
-                column = self.update_column(column, default=expression)
+                column = self.update_column(column, default=expression, default_location=self.default_location(item))
             elif kind == enums.ConstrType.CONSTR_IDENTITY:
                 if seen_identity:
                     self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Duplicate IDENTITY', item.location, [column.column_id])
@@ -291,6 +293,19 @@ class DdlParser:
             elif kind not in {enums.ConstrType.CONSTR_ATTR_DEFERRABLE, enums.ConstrType.CONSTR_ATTR_NOT_DEFERRABLE,
                               enums.ConstrType.CONSTR_ATTR_DEFERRED, enums.ConstrType.CONSTR_ATTR_IMMEDIATE}:
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported column constraint', item.location, [column.column_id])
+
+    def default_offset(self, constraint):
+        start = bisect_left(self.token_starts, constraint.location)
+        for index in range(start, len(self.tokens)):
+            token = self.tokens[index]
+            if token.name == 'DEFAULT':
+                return token.start
+            if token.name in {'ASCII_44', 'ASCII_59'}:
+                break
+        return None
+
+    def default_location(self, constraint):
+        return self.location(self.default_offset(constraint))
 
     def valid_check(self, expression):
         if expression.op in {'current_date', 'current_timestamp', 'unsupported'}:
@@ -404,6 +419,8 @@ class DdlParser:
             if op:
                 return Expression(op=op, args=[self.convert_expression(x, table) for x in node.args])
         if isinstance(node, ast.A_Expr):
+            if node.name and len(node.name) != 1:
+                raise ValueError('qualified operator')
             kind = node.kind
             if kind == enums.A_Expr_Kind.AEXPR_OP:
                 op = node.name[0].sval
@@ -438,6 +455,12 @@ class DdlParser:
         columns = self.columns_by_table[table.table_id]
         if kind == 'not_null' and len(source_names) != 1:
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'NOT NULL requires one column', item.location, [table.table_id])
+            return
+        if kind in {'primary_key', 'unique', 'foreign_key'} and len(source_names) != len(set(source_names)):
+            self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate key column', item.location, [table.table_id])
+            return
+        if kind == 'primary_key' and any(c.table_id == table.table_id and c.kind == 'primary_key' for c in self.constraints):
+            self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate primary key', item.location, [table.table_id])
             return
         if any(name not in columns for name in source_names):
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown constraint column', item.location, [table.table_id])
@@ -478,6 +501,9 @@ class DdlParser:
                 return
             target_columns = self.columns_by_table[target.table_id]
             target_names = [x.sval for x in item.pk_attrs or ()]
+            if len(target_names) != len(set(target_names)):
+                self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Duplicate referenced column', item.location, [table.table_id])
+                return
             if not target_names:
                 primary = next((x for x in self.constraints if x.table_id == target.table_id and x.kind == 'primary_key'), None)
                 target_ids = primary.column_ids if primary else []
@@ -489,6 +515,15 @@ class DdlParser:
             if len(target_ids) != len(source_names) or not target_ids:
                 self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown referenced columns', item.location, [table.table_id, target.table_id])
                 return
+            if not target_names:
+                valid_key = primary is not None and not primary.deferrable
+            else:
+                valid_key = any(key.table_id == target.table_id and key.kind in {'primary_key', 'unique'}
+                                and not key.deferrable and set(key.column_ids) == set(target_ids)
+                                for key in self.constraints)
+            if not valid_key:
+                self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Foreign key requires an available non-deferrable target key',
+                              item.location, [cid])
             actions = {'a': 'no_action', 'r': 'restrict', 'c': 'cascade', 'n': 'set_null', 'd': 'set_default'}
             match = {'s': 'simple', 'f': 'full'}.get(item.fk_matchtype)
             if match is None or item.fk_upd_action not in actions or item.fk_del_action not in actions:
@@ -517,6 +552,7 @@ class DdlParser:
         if table is None:
             self.diagnose('DDL_UNRESOLVED_REFERENCE', 'Unknown ALTER TABLE target', node.relation.location)
             return
+        pending_foreign_keys = []
         for command in node.cmds:
             if (command.subtype == enums.AlterTableType.AT_AddConstraint
                     and not (command.name or command.num or command.newowner or command.missing_ok or command.recurse)
@@ -524,6 +560,12 @@ class DdlParser:
                     and isinstance(command.def_, ast.Constraint)
                     and command.def_.contype in {enums.ConstrType.CONSTR_PRIMARY, enums.ConstrType.CONSTR_UNIQUE,
                                                  enums.ConstrType.CONSTR_FOREIGN, enums.ConstrType.CONSTR_CHECK}):
-                self.add_constraint(table, command.def_)
+                if command.def_.contype == enums.ConstrType.CONSTR_FOREIGN:
+                    pending_foreign_keys.append(command.def_)
+                else:
+                    self.add_constraint(table, command.def_)
             else:
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported ALTER TABLE action', self.statement_offset, [table.table_id])
+        # PostgreSQL creates index-backed keys before foreign keys within one ALTER.
+        for foreign_key in pending_foreign_keys:
+            self.add_constraint(table, foreign_key)

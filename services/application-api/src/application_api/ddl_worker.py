@@ -40,7 +40,6 @@ def main(analyze=None):
         fcntl.flock(lock, fcntl.LOCK_EX)
         sys.addaudithook(_audit)
         request = json.load(sys.stdin)
-        # T3 and T4 are not implemented yet: never report a fabricated analysis.
         def emit(message):
             print(json.dumps(message), flush=True)
 

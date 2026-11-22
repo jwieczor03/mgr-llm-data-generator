@@ -16,7 +16,7 @@ from application_api.schema_contracts import (
 )
 
 
-def test_production_worker_reports_analyzer_unavailable(tmp_path):
+def test_production_worker_returns_analysis(tmp_path):
     content = b'CREATE TABLE t (id int);'
     file = ManifestFile(file_id=uuid4(), name='t.sql', position=0, size_bytes=len(content),
                         sha256=hashlib.sha256(content).hexdigest(), artifact_id=uuid4())
@@ -25,9 +25,9 @@ def test_production_worker_reports_analyzer_unavailable(tmp_path):
                'files_base64': [base64.b64encode(content).decode()], 'checkpoint': None}
     result = WorkerProcess(tmp_path).run(request)
     assert result.error is None
-    assert [message['type'] for message in result.messages] == ['checkpoint', 'error']
+    assert [message['type'] for message in result.messages] == ['checkpoint', 'result']
     assert Checkpoint.model_validate(result.messages[0]['checkpoint']).valid_for(bundle, PROFILE)
-    assert result.messages[-1] == {'type': 'error', 'code': 'DDL_ANALYZER_UNAVAILABLE'}
+    assert result.messages[-1]['analysis']['supported']
 
 
 def test_worker_audit_hook_blocks_socket_and_dns(tmp_path):
