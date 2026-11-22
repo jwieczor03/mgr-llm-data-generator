@@ -195,17 +195,19 @@ class DdlParser:
             self.columns.append(col)
             self.columns_by_table[table.table_id][col.name] = col
         pending_foreign_keys = []
+        # PostgreSQL applies table constraints after transforming column definitions.
         for element in node.tableElts or ():
             if isinstance(element, ast.ColumnDef):
                 column = self.columns_by_table[table.table_id].get(element.colname)
                 if column:
                     self.column_constraints(table, column, element.constraints or (), pending_foreign_keys)
-            elif isinstance(element, ast.Constraint):
+        for element in node.tableElts or ():
+            if isinstance(element, ast.Constraint):
                 if element.contype == enums.ConstrType.CONSTR_FOREIGN:
                     pending_foreign_keys.append((element, None))
                 else:
                     self.add_constraint(table, element)
-            else:
+            elif not isinstance(element, ast.ColumnDef):
                 self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Unsupported table element', self.statement_offset, [table.table_id])
         for foreign_key, column in pending_foreign_keys:
             self.add_constraint(table, foreign_key, column)
@@ -220,6 +222,7 @@ class DdlParser:
     def column_constraints(self, table, column, constraints, pending_foreign_keys):
         seen_default = False
         seen_identity = False
+        explicit_nullability = None
         owner_kind = None
         attribute_kinds = {enums.ConstrType.CONSTR_ATTR_DEFERRABLE, enums.ConstrType.CONSTR_ATTR_NOT_DEFERRABLE,
                            enums.ConstrType.CONSTR_ATTR_DEFERRED, enums.ConstrType.CONSTR_ATTR_IMMEDIATE}
@@ -246,11 +249,21 @@ class DdlParser:
                     self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Conflicting constraint deferral', item.location, [column.column_id])
                 item.deferrable = (enums.ConstrType.CONSTR_ATTR_DEFERRABLE in attributes or
                                    (item.initdeferred and not explicit_not_deferrable))
+            if kind in {enums.ConstrType.CONSTR_NULL, enums.ConstrType.CONSTR_NOTNULL}:
+                if explicit_nullability is not None and explicit_nullability != kind:
+                    self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Conflicting NULL and NOT NULL', item.location, [column.column_id])
+                explicit_nullability = kind
             if kind == enums.ConstrType.CONSTR_NOTNULL:
                 self.add_constraint(table, item, column)
                 column = self.columns_by_table[column.table_id][column.name]
             elif kind == enums.ConstrType.CONSTR_NULL:
-                column = self.update_column(column, nullable=True)
+                current = self.columns_by_table[column.table_id][column.name]
+                required = current.automatic_id is not None or any(
+                    c.kind in {'primary_key', 'not_null'} and current.column_id in c.column_ids
+                    for c in self.constraints if c.table_id == table.table_id
+                )
+                if not required:
+                    column = self.update_column(column, nullable=True)
             elif kind == enums.ConstrType.CONSTR_DEFAULT:
                 if seen_default:
                     self.diagnose('DDL_UNSUPPORTED_STATEMENT', 'Duplicate DEFAULT', item.location, [column.column_id])

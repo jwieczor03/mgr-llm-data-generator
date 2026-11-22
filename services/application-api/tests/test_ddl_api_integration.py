@@ -688,3 +688,33 @@ def test_parser_worker_persists_primary_key_not_null_and_nul(client, db, data, e
         constraint = next(c for c in checkpoint['parsed']['constraints'] if c['kind'] == expected_constraint)
         assert constraint['name'] == 'nn'
         assert checkpoint['parsed']['columns'][0]['default']['literal_value'] == '1'
+
+
+@pytest.mark.parametrize(('data', 'kind'), [
+    (b'CREATE TABLE t (PRIMARY KEY(id), id int NULL);', 'primary_key'),
+    (b'CREATE TABLE t (id int NULL, PRIMARY KEY(id));', 'primary_key'),
+    (b'CREATE TABLE t (NOT NULL id, id int NULL);', 'not_null'),
+    (b'CREATE TABLE t (id int NULL, NOT NULL id);', 'not_null'),
+])
+def test_checkpoint_required_column_is_independent_of_table_constraint_order(client, db, data, kind):
+    project = client.post('/api/v1/projects', json={'name': 'Required column'}).json()['id']
+    attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'/api/v1/projects/{project}/ddl-attempts/{attempt}'
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'x.sql', 'size_bytes': len(data)}]}).status_code == 201
+    uploaded = client.post(path + '/files', files=[('files', ('x.sql', data, 'application/sql'))],
+                           headers={'X-DDL-Page-ID': page})
+    assert uploaded.status_code == 201
+    nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).status_code == 202
+
+    def read_checkpoint():
+        with db.session() as session:
+            return session.execute(text('SELECT checkpoint FROM app.ddl_attempts WHERE id=:id'),
+                                   {'id': uuid.UUID(attempt)}).scalar_one()
+
+    checkpoint = wait_for(read_checkpoint)
+    parsed = checkpoint['parsed']
+    assert parsed['diagnostics'] == []
+    assert not parsed['columns'][0]['nullable']
+    constraint = next(c for c in parsed['constraints'] if c['kind'] == kind)
+    assert constraint['column_ids'] == [parsed['columns'][0]['column_id']]

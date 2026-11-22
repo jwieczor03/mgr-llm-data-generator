@@ -526,3 +526,43 @@ def test_explicit_not_null_is_covered_by_checkpoint_hash():
     altered = checkpoint.model_dump(mode='json')
     altered['parsed']['constraints'][0]['name'] = 'changed'
     assert not Checkpoint.model_validate(altered).valid_for(bundle, PROFILE)
+
+
+@pytest.mark.parametrize(('sql', 'constraint_kind'), [
+    (b'CREATE TABLE t (PRIMARY KEY(id), id int NULL);', 'primary_key'),
+    (b'CREATE TABLE t (id int NULL, PRIMARY KEY(id));', 'primary_key'),
+    (b'CREATE TABLE t (NOT NULL id, id int NULL);', 'not_null'),
+    (b'CREATE TABLE t (id int NULL, NOT NULL id);', 'not_null'),
+    (b'CREATE TABLE t (id int PRIMARY KEY NULL);', 'primary_key'),
+    (b'CREATE TABLE t (id int NULL PRIMARY KEY);', 'primary_key'),
+])
+def test_required_table_constraint_is_order_independent(sql, constraint_kind):
+    _, result = parse(sql)
+    assert result.diagnostics == []
+    assert not result.columns[0].nullable
+    assert any(c.kind == constraint_kind and c.column_ids == [result.columns[0].column_id]
+               for c in result.constraints)
+
+
+@pytest.mark.parametrize('constraints', ['NOT NULL NULL', 'NULL NOT NULL'])
+def test_conflicting_explicit_column_null_constraints_are_diagnosed(constraints):
+    _, result = parse(f'CREATE TABLE t (id int {constraints});'.encode())
+    assert any(d.code == 'DDL_UNSUPPORTED_STATEMENT' for d in result.diagnostics)
+    assert not result.columns[0].nullable
+
+
+@pytest.mark.parametrize('sql', [b'CREATE TABLE t (PRIMARY KEY(id), id int NULL);',
+                                 b'CREATE TABLE t (NOT NULL id, id int NULL);'])
+def test_worker_checkpoint_keeps_required_columns_independent_of_order(tmp_path, sql):
+    from application_api.ddl_process import WorkerProcess
+
+    bundle = bundle_for(sql)
+    request = {'bundle': bundle.model_dump(mode='json'), 'profile': PROFILE.model_dump(mode='json'),
+               'files_base64': [base64.b64encode(sql).decode()], 'checkpoint': None}
+    outcome = WorkerProcess(tmp_path).run(request)
+    assert outcome.error is None
+    checkpoint = Checkpoint.model_validate(outcome.messages[0]['checkpoint'])
+    assert checkpoint.valid_for(bundle, PROFILE)
+    assert checkpoint.parsed.diagnostics == []
+    assert not checkpoint.parsed.columns[0].nullable
+    assert outcome.messages[-1]['code'] == 'DDL_ANALYZER_UNAVAILABLE'
