@@ -15,9 +15,8 @@ from test_ddl_parser import bundle_for
 pytestmark = [pytest.mark.integration, pytest.mark.skipif(os.getenv('RUN_DATABASE_TESTS') != '1', reason='wymaga izolowanego Docker PostgreSQL')]
 
 
-def setup_schema(db):
+def setup_schema(db, sql=b'CREATE TABLE parent (id int PRIMARY KEY); CREATE TABLE child (id int PRIMARY KEY, parent_id int);'):
     db.start()
-    sql = b'CREATE TABLE parent (id int PRIMARY KEY); CREATE TABLE child (id int PRIMARY KEY, parent_id int);'
     bundle = bundle_for(sql)
     parsed = DdlParser(lambda _: sql).parse(bundle, PROFILE)
     analysis = DdlSupport().diagnose(parsed, PROFILE)
@@ -134,3 +133,56 @@ def test_carry_forward_missing_column_remains_rejectable(db):
     assert invalid.value.code == 'RELATION_DEFINITION_INVALID'
     result = decide(db, project, bundle.schema_version_id, items[0]['id'], 'o', 1, 'REJECT', None)
     assert result['readiness']['ready']
+
+
+def test_pending_reason_tracks_approved_graph(db):
+    project, version, analysis, proposal = setup_schema(db)
+    tables = {t.name: str(t.table_id) for t in analysis.tables}
+    columns = {(str(c.table_id), c.name): str(c.column_id) for c in analysis.columns}
+    reverse = {'source_table_id': tables['parent'], 'target_table_id': tables['child'],
+               'column_pairs': [{'source_column_id': columns[(tables['parent'], 'id')],
+                                 'target_column_id': columns[(tables['child'], 'id')]}], 'explanation': 'reverse'}
+    discover(db, project, version, uuid4())
+    worker = RelationWorker(db, None, None)
+    worker.publish(worker.claim(), analysis, [proposal, reverse])
+    with db.session() as s:
+        items = relations(s, project, version)
+    assert all(item['invalid_reason'] is None for item in items)
+    first = next(item for item in items if item['source_table_id'] == tables['child'])
+    second = next(item for item in items if item['source_table_id'] == tables['parent'])
+    decide(db, project, version, first['id'], 'o', 1, 'APPROVE', False)
+    with db.session() as s:
+        updated = next(item for item in relations(s, project, version) if item['id'] == second['id'])
+    assert 'cykl' in updated['invalid_reason']
+    with pytest.raises(ProjectError) as invalid:
+        decide(db, project, version, second['id'], 'o', 1, 'APPROVE', False)
+    assert invalid.value.code == 'RELATION_DEFINITION_INVALID'
+    discover(db, project, version, uuid4())
+    worker.publish(worker.claim(), analysis, [reverse])
+    with db.session() as s:
+        pending = [item for item in relations(s, project, version) if item['status'] == 'PENDING']
+    assert len(pending) == 2 and all('cykl' in item['invalid_reason'] for item in pending)
+
+
+
+def test_reordered_ddl_fk_is_not_discovered(db):
+    sql = (b'CREATE TABLE parent (id int PRIMARY KEY, a int, b int, UNIQUE(a,b)); '
+           b'CREATE TABLE child (id int PRIMARY KEY, parent_id int, x int, y int, '
+           b'FOREIGN KEY(x,y) REFERENCES parent(a,b));')
+    project, version, analysis, _ = setup_schema(db, sql)
+    tables = {t.name: str(t.table_id) for t in analysis.tables}
+    columns = {(str(c.table_id), c.name): str(c.column_id) for c in analysis.columns}
+    child, parent = tables['child'], tables['parent']
+    def pair(source, target):
+        return {'source_column_id': columns[(child, source)], 'target_column_id': columns[(parent, target)]}
+    common = {'source_table_id': child, 'target_table_id': parent, 'explanation': 'relacja'}
+    duplicate = common | {'column_pairs': [pair('y', 'b'), pair('x', 'a')]}
+    other = common | {'column_pairs': [pair('x', 'b'), pair('y', 'a')]}
+    discover(db, project, version, uuid4())
+    worker = RelationWorker(db, None, None)
+    worker.publish(worker.claim(), analysis, [duplicate, other])
+    with db.session() as s:
+        items = relations(s, project, version)
+    assert [item['source'] for item in items].count('DDL') == 1
+    proposed = [item for item in items if item['source'] == 'MODEL_PROPOSAL']
+    assert len(proposed) == 1 and proposed[0]['column_pairs'] == other['column_pairs']

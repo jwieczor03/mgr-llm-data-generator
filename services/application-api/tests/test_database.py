@@ -43,8 +43,12 @@ def test_start_restart_health_and_guard(db):
 
 
 def test_failed_migration_rolls_back_and_does_not_retry(db):
-    revision = db.migrations / "versions" / "0004_test.py"
-    revision.write_text('from alembic import op\nrevision="0004_test"\ndown_revision="0003_ddl_versions"\nbranch_labels=None\ndepends_on=None\ndef upgrade():\n op.execute("CREATE TABLE app.test_only (id int)")\n op.execute("SELECT 1/0")\n')
+    from alembic.script import ScriptDirectory
+    from application_api.database import migration_config
+
+    head = ScriptDirectory.from_config(migration_config(db.migrations)).get_current_head()
+    revision = db.migrations / "versions" / "9999_test.py"
+    revision.write_text(f'from alembic import op\nrevision="9999_test"\ndown_revision="{head}"\nbranch_labels=None\ndepends_on=None\ndef upgrade():\n op.execute("CREATE TABLE app.test_only (id int)")\n op.execute("SELECT 1/0")\n')
     db.start()
     assert db.report()["issues"][0]["code"] == "migration_failed"
     with db.engine.connect() as conn:

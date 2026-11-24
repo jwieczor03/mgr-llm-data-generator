@@ -62,3 +62,18 @@ def test_malformed_url_is_rejected_without_network(monkeypatch, url):
     with TestClient(app) as client:
         assert client.get('/health/config').json()['status'] == 'invalid'
         assert app.state.llm_client_factory is None
+
+
+def test_invalid_profile_keeps_diagnostics_and_blocks_calls(monkeypatch):
+    monkeypatch.setenv('LLM_CONTEXT_TOKENS', '0')
+    with TestClient(app) as client:
+        report = client.get('/health/config')
+        assert report.status_code == 200
+        assert report.json()['status'] == 'invalid'
+        assert report.json()['blocked_capabilities'] == ['llm']
+        assert client.get('/health/live').status_code == 200
+        assert client.get('/health/ready').json()['capacity'] == 'incapable'
+        assert app.state.llm_client_factory is None
+        body = {'context': {'project_id': 'p', 'preparation_operation_id': 'op', 'schema_version_id': 'v',
+                            'ddl_hash': 'h', 'ddl': 'CREATE TABLE t(id int);', 'tables': []}}
+        assert client.post('/internal/v1/relation-proposals', json=body).status_code == 422

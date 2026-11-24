@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import FastAPI, Request
-from pydantic import Field
+from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from generation_service.interpretation import InterpretationService, Profile
@@ -58,6 +58,12 @@ async def lifespan(app: FastAPI):
             app.state.config_report = {"service": "generation-service", "status": "invalid",
                 "issues": [{"field": "llm", "code": "invalid_llm_config", "message": "Konfiguracja LLM jest niepoprawna."}],
                 "blocked_capabilities": ["llm"]}
+    except ValidationError:
+        app.state.settings = None
+        app.state.llm_client_factory = None
+        app.state.config_report = {"service": "generation-service", "status": "invalid",
+            "issues": [{"field": "llm", "code": "invalid_llm_config", "message": "Konfiguracja LLM jest niepoprawna."}],
+            "blocked_capabilities": ["llm"]}
     except (OSError, UnicodeError):
         app.state.settings = None
         app.state.llm_client_factory = None

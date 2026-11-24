@@ -2,6 +2,13 @@
 from application_api.schema_contracts import SchemaAnalysis
 
 
+def duplicates_ddl(analysis: SchemaAnalysis, proposal: dict) -> bool:
+    pairs = {(p['source_column_id'], p['target_column_id']) for p in proposal['column_pairs']}
+    return any(str(r.source_table_id) == proposal['source_table_id']
+               and str(r.target_table_id) == proposal['target_table_id']
+               and {(str(a), str(b)) for a, b in r.column_pairs} == pairs for r in analysis.relations)
+
+
 def definition_error(analysis: SchemaAnalysis, proposal: dict, effective: list[dict], required: bool | None = None) -> str | None:
     tables = {str(t.table_id): t for t in analysis.tables}
     columns = {str(c.column_id): c for c in analysis.columns}
@@ -16,6 +23,8 @@ def definition_error(analysis: SchemaAnalysis, proposal: dict, effective: list[d
     if any(s not in columns or t not in columns or str(columns[s].table_id) != source
            or str(columns[t].table_id) != target for s, t in zip(sources, targets)):
         return 'Nie znaleziono kolumn relacji w odpowiednich tabelach.'
+    if duplicates_ddl(analysis, proposal):
+        return 'Relacja jest już zadeklarowana jako klucz obcy w DDL.'
     groups = ({'smallint', 'integer', 'bigint', 'numeric'}, {'text', 'varchar'})
     def compatible(a, b):
         return a == b and a in {'smallint', 'integer', 'bigint', 'numeric', 'text', 'varchar',

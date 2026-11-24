@@ -10,11 +10,22 @@ from generation_service.bootstrap import Settings, app, configure_llm
 
 class OllamaHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        self.rfile.read(int(self.headers['Content-Length']))
+        body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         if self.path != '/api/chat':
             self.send_error(404)
             return
-        data = json.dumps({'model': 'model', 'message': {'role': 'assistant', 'content': '{"relations":[]}'},
+        context = json.loads(body['messages'][-1]['content'])['request']['context']
+        tables = {t['name'].split('.')[-1]: t for t in context['tables']}
+        relations = []
+        if 'buyers' in tables and 'orders' in tables:
+            buyer, order = tables['buyers'], tables['orders']
+            source = next(c['id'] for c in order['columns'] if c['name'] == 'buyer_id')
+            target = next(c['id'] for c in buyer['columns'] if c['name'] == 'id')
+            relations.append({'source_table_id': order['id'], 'target_table_id': buyer['id'],
+                              'column_pairs': [{'source_column_id': source, 'target_column_id': target}],
+                              'explanation': 'Możliwe powiązanie zamówienia z kupującym.'})
+        content = json.dumps({'relations': relations})
+        data = json.dumps({'model': 'model', 'message': {'role': 'assistant', 'content': content},
                            'done': True, 'done_reason': 'stop'}).encode()
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')

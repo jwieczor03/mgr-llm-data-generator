@@ -62,13 +62,17 @@ def relations(session, project, schema_version):
                           'target_table_id': str(r.target_table_id), 'column_pairs': [
                               {'source_column_id': str(a), 'target_column_id': str(b)} for a, b in r.column_pairs],
                           'reference_required': None, 'ddl': r.model_dump(mode='json')})
+    effective = [p['definition'] for p in approved(session, schema_version)] if state['analysis'] else []
     rows = session.execute(text('''SELECT p.*, d.id AS decision_id, d.decision, d.reference_required FROM app.relation_proposals p
         LEFT JOIN app.relation_decisions d ON d.proposal_id=p.id WHERE p.schema_version_id=:version ORDER BY p.id'''),
         {'version': schema_version}).mappings()
     for p in rows:
+        reason = p['invalid_reason']
+        if p['decision'] is None and state['analysis']:
+            reason = reason or definition_error(analysis, p['definition'], effective)
         items.append(p['definition'] | {'id': str(p['id']), 'schema_version_id': str(schema_version), 'revision': p['revision'],
                      'source': p['source'], 'status': {'APPROVE': 'APPROVED', 'REJECT': 'REJECTED'}.get(p['decision'], 'PENDING'),
-                     'reference_required': p['reference_required'], 'invalid_reason': p['invalid_reason'],
+                     'reference_required': p['reference_required'], 'invalid_reason': reason,
                      'decision_id': str(p['decision_id']) if p['decision_id'] else None})
     return items
 

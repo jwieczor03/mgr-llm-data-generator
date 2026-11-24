@@ -37,3 +37,12 @@ def test_self_reference_requires_nullable_and_optional():
     assert definition_error(a, p, [p], False)
     b = schema('CREATE TABLE t (id int PRIMARY KEY, parent_id int NOT NULL);')
     assert definition_error(b, proposal(b, 't', 't', [('parent_id', 'id')]), [], False)
+
+
+def test_reordered_composite_ddl_fk_is_same_relation():
+    a = schema('CREATE TABLE p (a int, b int, PRIMARY KEY(a,b)); '
+               'CREATE TABLE c (x int, y int, FOREIGN KEY(x,y) REFERENCES p(a,b));')
+    reordered = proposal(a, 'c', 'p', [('y', 'b'), ('x', 'a')])
+    assert 'DDL' in definition_error(a, reordered, [])
+    different = proposal(a, 'c', 'p', [('y', 'a'), ('x', 'b')])
+    assert definition_error(a, different, []) is None

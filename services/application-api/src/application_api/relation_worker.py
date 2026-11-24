@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from application_api.artifact_store import ArtifactRef
 from application_api.ddl_repository import now, sha256
-from application_api.relation_validation import definition_error
+from application_api.relation_validation import definition_error, duplicates_ddl
 from application_api.relations import lock_project, row
 from application_api.schema_contracts import (
     DdlBundle,
@@ -99,7 +99,6 @@ class RelationWorker:
         known_tables = {str(t.table_id) for t in analysis.tables}
         known_columns = {str(c.column_id): str(c.table_id) for c in analysis.columns}
         unique = {}
-        ddl = {(str(r.source_table_id), str(r.target_table_id), tuple((str(a), str(b)) for a,b in r.column_pairs)) for r in analysis.relations}
         for p in proposals:
             if not isinstance(p, dict) or set(p) != {'source_table_id', 'target_table_id', 'column_pairs', 'explanation'}:
                 raise ValueError('bad response')
@@ -113,7 +112,7 @@ class RelationWorker:
                 or any(known_columns.get(s) != source or known_columns.get(t) != target for s,t in links)):
                 raise ValueError('bad response')
             key = (source, target, links)
-            if key not in ddl:
+            if not duplicates_ddl(analysis, p):
                 unique.setdefault(key, p)
         with self.database.session() as session:
             lock_project(session, job['project_id'])
