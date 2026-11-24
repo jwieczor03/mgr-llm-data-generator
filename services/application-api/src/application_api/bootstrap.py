@@ -24,6 +24,8 @@ from application_api.identity import (
     LocalActorContextProvider,
 )
 from application_api.projects import router as projects_router
+from application_api.relation_worker import RelationWorker
+from application_api.relations_api import router as relations_router
 
 
 @asynccontextmanager
@@ -53,6 +55,10 @@ async def lifespan(app: FastAPI):
             await run_in_threadpool(coordinator.ready_event.wait, 5)
     except (OSError, ValueError):
         pass  # The existing diagnostics remain available when DDL is unavailable.
+    relation_worker = None
+    if (app.state.settings and getattr(app.state.database, "migration_status", None) == "applied"):
+        relation_worker = RelationWorker(app.state.database, app.state.artifacts, app.state.settings.generation_service_url)
+        relation_worker.start()
     try:
         await ready_for_app(app)
     except Exception:
@@ -60,6 +66,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if relation_worker:
+            await run_in_threadpool(relation_worker.stop)
         if coordinator:
             await run_in_threadpool(coordinator.stop)
         await run_in_threadpool(app.state.database.close)
@@ -151,6 +159,7 @@ def create_app(
     app.state.access_policy = OwnershipAccessPolicy() if access_policy is None else access_policy
     app.include_router(projects_router)
     app.include_router(ddl_router)
+    app.include_router(relations_router)
     app.add_api_route("/health/live", live, methods=["GET"])
     app.add_api_route("/health/ready", ready, methods=["GET"])
     app.add_api_route("/health/config", config, methods=["GET"])

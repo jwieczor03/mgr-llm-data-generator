@@ -750,3 +750,89 @@ def test_initial_content_rejection_is_terminal_without_default(client, db, sql, 
     with db.session() as session:
         assert session.execute(text('SELECT default_schema_version_id FROM app.projects WHERE id=:id'),
                                {'id': uuid.UUID(project)}).scalar_one() is None
+
+
+def test_relation_discovery_to_private_generation_http(client, db):
+    import socket
+    import subprocess
+    from pathlib import Path
+
+    import httpx
+    from application_api.relation_worker import RelationWorker
+
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+    generation = Path(__file__).resolve().parents[2] / 'generation-service'
+    process = subprocess.Popen(['uv', 'run', '--locked', '--no-sync', '--project', str(generation), 'python', str(generation / 'tests/relation_http_fixture.py'), str(port)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=generation)
+    worker = None
+    try:
+        def server_ready():
+            try:
+                return httpx.get(f'http://127.0.0.1:{port}/health/live', timeout=.5, trust_env=False).status_code == 200
+            except httpx.HTTPError:
+                return False
+        wait_for(server_ready)
+        project = client.post('/api/v1/projects', json={'name': 'Relations HTTP'}).json()['id']
+        root = f'/api/v1/projects/{project}'
+        attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+        path = f'{root}/ddl-attempts/{attempt}'
+        data = b'CREATE TABLE t (id int PRIMARY KEY);'
+        assert client.put(path, json={'page_id': page, 'files': [{'name': 'a.sql', 'size_bytes': len(data)}]}).status_code == 201
+        assert client.post(path + '/files', files=[('files', ('a.sql', data))], headers={'X-DDL-Page-ID': page}).status_code == 201
+        nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+        version = client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).json()['schema_version_id']
+        wait_for(lambda: client.get(path).json()['status'] == 'SUCCEEDED')
+        base = f'{root}/schema-versions/{version}'
+        worker = RelationWorker(db, client.app.state.artifacts, f'http://127.0.0.1:{port}')
+        worker.start()
+        response = client.post(base + '/relation-discoveries', json={'request_id': str(uuid.uuid4())})
+        assert response.status_code == 202, response.text
+        discovery_id = response.json()['discovery_id']
+        result = wait_for(lambda: (state if (state := client.get(base + '/relation-discoveries/' + discovery_id).json())['status'] in ('SUCCEEDED', 'FAILED') else None))
+        assert result['status'] == 'SUCCEEDED' and result['items'] == []
+        assert client.get(base + '/readiness').json()['ready'] is True
+
+        def upload(sql):
+            attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+            path = f'{root}/ddl-attempts/{attempt}'
+            assert client.put(path, json={'page_id': page, 'files': [{'name': 'new.sql', 'size_bytes': len(sql)}]}).status_code == 201
+            staged = client.post(path + '/files', files=[('files', ('new.sql', sql))], headers={'X-DDL-Page-ID': page})
+            assert staged.status_code == 201, staged.text
+            version = client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': staged.json()['receipt_nonce']}).json()['schema_version_id']
+            wait_for(lambda: client.get(path).json()['status'] == 'SUCCEEDED')
+            return f'{root}/schema-versions/{version}'
+
+        ddl = b'CREATE TABLE buyers (id int PRIMARY KEY); CREATE TABLE orders (id int PRIMARY KEY, buyer_id int);'
+        second = upload(ddl)
+        response = client.post(second + '/relation-discoveries', json={'request_id': str(uuid.uuid4())})
+        discovery = response.json()['discovery_id']
+        found = wait_for(lambda: (state if (state := client.get(second + '/relation-discoveries/' + discovery).json())['status'] in ('SUCCEEDED', 'FAILED') else None))
+        assert found['status'] == 'SUCCEEDED' and len(found['items']) == 1
+        proposal = found['items'][0]
+        assert proposal['status'] == 'PENDING' and proposal['source'] == 'MODEL_PROPOSAL'
+        assert client.get(second + '/readiness').json()['blockers'][0]['code'] == 'RELATION_REVIEW_PENDING'
+        decision_url = second + '/relation-proposals/' + proposal['id'] + '/decision'
+        assert client.post(decision_url, json={'expected_revision': proposal['revision'], 'decision': 'APPROVE'}).status_code == 422
+        decision = client.post(decision_url, json={'expected_revision': proposal['revision'], 'decision': 'APPROVE', 'reference_required': False})
+        assert decision.status_code == 200 and decision.json()['readiness']['ready']
+        assert client.get(second + '/relations').json()['items'][0]['status'] == 'APPROVED'
+
+        new_ddl = b'CREATE TABLE buyers (id int PRIMARY KEY); CREATE TABLE orders (id int PRIMARY KEY, buyer_id int REFERENCES buyers(id));'
+        third = upload(new_ddl)
+        items = client.get(third + '/relations').json()['items']
+        assert len(items) == 2
+        assert next(i for i in items if i['source'] == 'DDL')['status'] == 'APPROVED'
+        carried = next(i for i in items if i['source'] == 'CARRIED_FORWARD')
+        assert carried['status'] == 'PENDING' and 'DDL' in carried['invalid_reason']
+        assert client.get(third + '/readiness').json()['blockers'][0]['code'] == 'RELATION_REVIEW_PENDING'
+        decision_url = third + '/relation-proposals/' + carried['id'] + '/decision'
+        assert client.post(decision_url, json={'expected_revision': carried['revision'], 'decision': 'APPROVE', 'reference_required': False}).status_code == 422
+        rejected = client.post(decision_url, json={'expected_revision': carried['revision'], 'decision': 'REJECT'})
+        assert rejected.status_code == 200 and rejected.json()['readiness']['ready']
+    finally:
+        if worker:
+            worker.stop()
+        process.terminate()
+        process.wait(timeout=5)
