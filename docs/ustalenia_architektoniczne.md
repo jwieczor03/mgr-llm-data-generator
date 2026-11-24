@@ -1308,3 +1308,70 @@ tabeli są dostępne dla jej FK niezależnie od kolejności ich zapisu. REFERENC
 bez listy kolumn wskazuje klucz główny, który nie może być odraczalny;
 inny UNIQUE go nie zastępuje. Parametry numeric podlegają zakresowi
 PostgreSQL, a sprawdzenie wartości zachowuje dokładność dziesiętną.
+
+### S5-T1: kwalifikacja adaptera modeli (#55)
+
+**Ustalone przez architekta w procesie realizacji:** LiteLLM 1.110.2 nie
+przeszedł kwalifikacji metryk. Przy odpowiedzi Ollamy zawierającej
+`prompt_eval_count=17` i bez `eval_count` zwrócił `prompt_tokens=17`,
+`completion_tokens=1`, `total_tokens=18`, bez oznaczenia wyliczenia tokenów.
+Natomiast `extra_body` przekazało `truncate=false` i `shift=false` na najwyższym
+poziomie natywnego `/api/chat`. Test z oboma polami nieobecnymi również zwrócił
+oszacowane liczby (8 i 1). Źródło zachowania:
+[kod transformacji LiteLLM 1.110.2](https://github.com/BerriAI/litellm/blob/v1.110.2/litellm/llms/ollama/chat/transformation.py#L365-L377).
+[PyPI wersji](https://pypi.org/project/litellm/1.110.2/) zawiera poświadczenia
+pochodzenia artefaktów. Samo ich istnienie nie dowodzi poprawności metryk.
+
+Odtworzenie kontrolowanej próby (wymaga dostępu do pakietu, nasłuchuje wyłącznie
+na loopback; nie używa kluczy ani modeli):
+
+```sh
+uv run --locked --project services/generation-service --with litellm==1.110.2 python services/generation-service/qualification/litellm_1_110_2.py
+```
+
+W locku i w działającym serwisie nie ma LiteLLM. Zatwierdzony wariant zastępczy
+to SDK Ollama 0.6.3 oraz OpenAI 2.38.0 za własnym portem, bez awaryjnego
+przełączania. Ollama używa publicznego `AsyncClient.chat`; transport HTTP
+wymusza flagi dla jedynego dozwolonego żądania. Drugi adapter wymaga jawnego
+adresu API zgodnego z SDK i klucza. Oba wyłączają ponowienia, przekierowania
+i proxy środowiskowe. Dla lokalnych danych wyjątek od bramki udostępniania
+wymaga jawnej deklaracji operatora, że wskazany zaufany serwer korzysta
+z `OLLAMA_NO_CLOUD=1` i lokalnych wag. Sama konfiguracja nie potwierdza tego
+sieciowo. W przeciwnym razie obowiązuje bramka udostępniania.
+
+**Konfiguracja S5-T1:** brak wszystkich opcjonalnych ustawień LLM zachowuje
+stan foundation. Jakakolwiek podana wartość aktywuje bezsieciową walidację
+kompletu; poprawny zestaw tworzy port w stanie serwisu, błędny blokuje LLM
+w `/health/config` stałym komunikatem bez wartości. Konfiguracja obejmuje
+backend, zaufany adres bazowy, sekret dla API zewnętrznego i opcjonalną
+jawną deklarację lokalności. Model, strategia, prompty i budżet należą do
+kompozycji programowej. Zewnętrzny adres wymaga HTTPS; HTTP jest dopuszczalne
+wyłącznie dla literalnego adresu loopback. Nie są wykonywane sondy dostawców.
+
+Audyt zależności produkcyjnych po imporcie SDK: `uv export --locked --project
+services/generation-service --no-dev --no-emit-project --no-hashes` oraz
+`pip-audit 2.10.1 --disable-pip --no-deps` dla pełnego eksportu: brak znanych
+podatności w chwili sprawdzenia. Lock zawiera hashe artefaktów.
+
+**Dowód przeglądu drzewa LiteLLM:** kwalifikację wykonano dla oficjalnego
+`litellm==1.110.2` bez extras, osobno od runtime serwisu. Tymczasowy projekt Python 3.14 z jedyną zależnością
+`litellm==1.110.2` rozwiązano 24 listopada 2026 za pomocą `uv lock`. Jego
+lock ma SHA-256
+`6e95b9a3012e54b672e98e2079ffea62979c541bff87c1e13e1c984fc88ce504`
+i obejmuje 63 pakiety łącznie z lokalnym projektem kwalifikacyjnym. Artefakty
+pobrano z PyPI, z hashami w locku; PyPI podaje też poświadczenie pochodzenia
+wydania LiteLLM 1.110.2 dla taga `c3cafa3`. To nie jest dowód braku luk.
+Eksport całego drzewa (`uv export --locked --project <katalog-tymczasowego-projektu>
+--no-emit-project --no-hashes`) sprawdzono `pip-audit 2.10.1 --disable-pip --no-deps`; wynik:
+brak znanych podatności w chwili audytu. Kontrola dotyczyła znanych zgłoszeń
+przypiętych wersji, nie stanowi analizy kodu ani gwarancji bezpieczeństwa.
+Ponowne rozwiązanie drzewa w przyszłości może wybrać inne wersje zależności;
+hash identyfikuje zbadany lock. Nie dodano LiteLLM do runtime serwisu.
+
+**Ochrona logów SDK:** dedykowany proces serwisu po imporcie SDK wycisza
+namespace `openai`, `httpx` i `httpcore`, w tym istniejące loggery potomne;
+logger `openai._base_client` jest wyłączony. Wynika to z logowania wiadomości
+przez SDK na poziomie DEBUG przed wysłaniem HTTP. Ustawienie obejmuje również
+kompozycję programową i ogranicza diagnostykę tych bibliotek; jest zależne
+od przypiętych wersji i wymaga ponownej weryfikacji przy ich zmianie. Logi
+aplikacji pozostają dostępne.

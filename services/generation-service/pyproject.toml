@@ -4,6 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "fastapi==0.135.1",
+    "httpx==0.28.1",
+    "ollama==0.6.3",
+    "openai==2.38.0",
     "pydantic-settings==2.16.3",
     "uvicorn==0.42.0",
 ]
