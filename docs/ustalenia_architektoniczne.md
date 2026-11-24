@@ -1414,7 +1414,9 @@ i zatwierdzenie planu #51. Nie ma solvera ani gwarancji jakości interpretacji.
 Wynik i bezpieczny błąd zawierają przypięcie oraz dostępny pomiar `Attempt`;
 błąd techniczny różni się od `invalid_model_response`. Przed faktycznym
 wywołaniem pomiar nie powstaje; po awarii transportu i błędnym JSON pozostaje
-dostępny. Pomiar ma `preparation_operation_id`, `call_id`, projekt, wersję,
+dostępny. Anulowanie pozostaje anulowaniem zadania asyncio; wyjątek
+`InterpretationCancelled` przekazuje przypięcie i pomiar, jeśli wywołanie
+zdążyło się rozpocząć. Pomiar ma `preparation_operation_id`, `call_id`, projekt, wersję,
 hash DDL i odpowiednią rewizję. #52 i #62 odpowiadają za trwałe zapisanie,
 powiązanie z migawką i nienaliczanie tych samych pomiarów przy ponowieniu.
 Ta operacja nie implementuje bazy, idempotencji portu, integracji #29/#33/#51,

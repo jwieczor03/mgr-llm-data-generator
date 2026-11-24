@@ -8,6 +8,7 @@ from generation_service.interpretation import (
     ApprovedRule,
     Column,
     Context,
+    InterpretationCancelled,
     InterpretationError,
     PlanRequest,
     Profile,
@@ -111,9 +112,10 @@ def test_plan_clarifications_and_conflicts():
     assert prepared.snapshot_hash != first.snapshot_hash and 'VIP means active' in prepared.context_json
     fake.output = json.dumps({'kind': 'plan', 'tables': [{'table_id': t, 'count': n} for t, n in
                              [('orders', 200), ('clients', 30), ('products', 10), ('items', 0)]]})
-    assert len(execute(service, fake, profile, prepared).value.tables) == 4
-    fake.output = '{"kind":"conflict","source":"ddl","reason":"forbidden","object_id":null}'
-    assert execute(service, fake, profile, prepared).value.kind == 'conflict'
+    result = execute(service, fake, profile, prepared)
+    assert {item.table_id: item.count for item in result.value.tables} == {
+        'orders': 200, 'clients': 30, 'products': 10, 'items': 0}
+    assert result.prepared.revision_id == 'rev' and result.measurement.revision_id == 'rev'
     fake.output = '{"kind":"conflict","source":"approved_rule","reason":"forbidden","object_id":"r"}'
     assert execute(service, fake, profile, prepared).value.kind == 'conflict'
 
@@ -250,3 +252,60 @@ def test_deep_json_and_overflow_are_safe_invalid_response():
             execute(service, fake, profile, prepared)
         assert exc.value.code == 'invalid_model_response' and exc.value.measurement is not None
         assert parameter not in str(exc.value)
+
+
+def test_ddl_conflict_for_distinct_command():
+    service, fake, profile = setup('{"kind":"conflict","source":"ddl","reason":"id is required","object_id":"oid"}')
+    prepared = service.prepare_plan(PlanRequest(context=context(), order_revision_id='conflict-rev',
+                                                command='Create orders without an id'))
+    result = execute(service, fake, profile, prepared)
+    assert result.value.kind == 'conflict' and result.value.source == 'ddl'
+    assert result.prepared.revision_id == result.measurement.revision_id == 'conflict-rev'
+
+
+def test_minor_unspecified_detail_returns_plan():
+    service, fake, profile = setup('{"kind":"plan","tables":[{"table_id":"orders","count":3}]}')
+    prepared = service.prepare_plan(PlanRequest(context=context(), order_revision_id='minor-rev',
+                                                command='Create 3 orders; choose incidental details yourself'))
+    result = execute(service, fake, profile, prepared)
+    assert result.value.kind == 'plan' and result.value.tables[0].count == 3
+    assert result.prepared.revision_id == result.measurement.revision_id == 'minor-rev'
+
+
+@pytest.mark.parametrize('bad_value', [float('inf'), '\ud800'])
+def test_invalid_context_fails_safely_before_call(bad_value):
+    service, fake, _ = setup('{"relations":[]}')
+    bad_context = context().model_copy(update={
+        'approved_rules': (ApprovedRule(id='r', definition={'value': bad_value}),)})
+    with pytest.raises(InterpretationError) as exc:
+        service.prepare_relations(RelationRequest(context=bad_context))
+    assert exc.value.code == 'technical_error' and exc.value.measurement is None
+    assert not fake.calls
+
+
+def test_cancelled_call_preserves_scoped_attempt():
+    async def scenario():
+        started = asyncio.Event()
+        class Waiting(Fake):
+            async def send(self, call):
+                self.calls.append(call)
+                started.set()
+                await asyncio.Event().wait()
+        fake = Waiting('')
+        fake.trusted_local = True
+        profile = Profile('model', (), 10000, 100, lambda messages: len(str(messages)))
+        service = create_interpretation_service(lambda: LlmClient(fake), profile)
+        prepared = service.prepare_plan(PlanRequest(context=context(), order_revision_id='cancel-rev', command='orders'))
+        task = asyncio.create_task(service.interpret_plan(prepared, deadline=asyncio.get_running_loop().time() + 10,
+                                                          disclosure_digest=None))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(InterpretationCancelled) as exc:
+            await task
+        measurement = exc.value.measurement
+        assert task.cancelled() and exc.value.prepared == prepared
+        assert (measurement.project_id, measurement.preparation_operation_id, measurement.schema_version_id,
+                measurement.ddl_hash, measurement.revision_id) == ('p', 'op', 'v', 'manifest', 'cancel-rev')
+        assert measurement.attempt.status == 'cancelled' and measurement.attempt.call_id
+        assert len(fake.calls) == 1
+    asyncio.run(scenario())
