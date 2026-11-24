@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from generation_service.interpretation import InterpretationService, Profile
 from generation_service.llm import LlmClient
 from generation_service.llm_transports import OllamaBackend, OpenAICompatibleBackend
 
@@ -32,6 +33,12 @@ def configure_llm(settings: Settings) -> Callable[[], LlmClient] | None:
     if settings.llm_backend == 'external' and settings.llm_trusted_local is None:
         return partial(LlmClient, OpenAICompatibleBackend(settings.llm_base_url, settings.llm_api_key or ''))
     raise ValueError('invalid configuration')
+
+
+def create_interpretation_service(client_factory: Callable[[], LlmClient] | None,
+                                  profile: Profile | None) -> InterpretationService:
+    """Compose only an explicitly supplied, trusted model profile."""
+    return InterpretationService(client_factory, profile)
 
 
 @asynccontextmanager
