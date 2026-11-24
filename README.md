@@ -520,3 +520,42 @@ w tym samym terminalu, w którym utworzono katalog.
    oraz niezmieniony termin kolejnej automatycznej kontroli.
 
 To kroki odbioru do wykonania przez użytkownika, nie wynik testu przeglądarki.
+
+### Adapter modeli (S5-T1)
+
+Adapter w serwisie generowania jest wewnętrzną granicą, bez endpointu
+uruchamiania generowania. Dla każdego wywołania wymagane są identyfikatory
+operacji, strategii i promptu, skrót migawki, budżet czasu oraz zachowawcza
+liczba tokenów wejścia z licznika właściwego dla modelu. Dostawca zewnętrzny
+wymaga potwierdzenia udostępnienia przypiętego do dokładnych wiadomości i skrótu
+migawki. Zaufanie lokalnemu runtime Ollamy wymaga deklaracji operatora opisanej
+w rejestrze ustaleń; domyślnie bramka jest włączona.
+
+Sprawdzenie bez prawdziwych modeli i kluczy:
+
+```sh
+uv run --locked --project services/generation-service pytest services/generation-service/tests
+```
+
+Testy używają kontrolowanego lokalnego serwera. Nie potwierdzają działania
+konkretnego wdrożenia Ollamy ani zewnętrznego dostawcy. Ręczny odbiór:
+uruchom powyższe testy i sprawdź w wynikach scenariusze flag Ollamy, bramki,
+braku ponowień, anulowania i wyboru strategii. Szczegóły kwalifikacji LiteLLM
+są w [rejestrze ustaleń](docs/ustalenia_architektoniczne.md#s5-t1-kwalifikacja-adaptera-modeli-55).
+
+Opcjonalną konfigurację pokazano w `services/generation-service/.env.example`.
+Wszystkie ustawienia pozostawione bez wartości zachowują dotychczasowy start.
+Podanie któregokolwiek uruchamia walidację: `LLM_BACKEND` (`ollama` lub
+`external`) i `LLM_BASE_URL` są wymagane, a `external` wymaga też `LLM_API_KEY`.
+Adres API zewnętrznego wymaga HTTPS; literalny loopback dopuszcza HTTP do testów.
+`LLM_TRUSTED_LOCAL=true` oznacza deklarację warunków zaufanej Ollamy; domyślnie
+jest wyłączona. `/health/config` nie łączy się z modelem i nie ujawnia wartości.
+
+W kodzie wybór strategii i promptu jest niezależny: implementacja protokołu
+`Strategy` ma wersjonowaną `identity`, a każda tworzona przez nią struktura
+`Call` otrzymuje osobną `prompt=Identity(nazwa, wersja)` i właściwe wiadomości.
+`run_strategy` wiąże wybraną implementację z operacją i skrótem migawki;
+`Execution.complete` sprawdza ich zgodność przy każdym wywołaniu. Podmiana
+strategii lub promptu wymaga jawnego wyboru kodu wywołującego. Test
+`test_manual_strategy_switch_preserves_snapshot` pokazuje dwa warianty na tej
+samej migawce. Nie ma jeszcze gotowych strategii generowania ani promptów produktu.

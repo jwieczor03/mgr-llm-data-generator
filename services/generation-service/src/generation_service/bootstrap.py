@@ -1,22 +1,54 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
+from typing import Callable
 
 from fastapi import FastAPI, Request
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from generation_service.llm import LlmClient
+from generation_service.llm_transports import OllamaBackend, OpenAICompatibleBackend
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[2] / ".env", extra="ignore")
+    llm_backend: str | None = None
+    llm_base_url: str | None = None
+    llm_api_key: str | None = Field(default=None, repr=False, exclude=True)
+    llm_trusted_local: str | None = None
+
+
+def configure_llm(settings: Settings) -> Callable[[], LlmClient] | None:
+    fields = (settings.llm_backend, settings.llm_base_url, settings.llm_api_key, settings.llm_trusted_local)
+    if all(value is None for value in fields):
+        return None
+    if not settings.llm_base_url or settings.llm_trusted_local not in (None, 'true', 'false'):
+        raise ValueError('invalid configuration')
+    if settings.llm_backend == 'ollama' and settings.llm_api_key is None:
+        return partial(LlmClient, OllamaBackend(settings.llm_base_url,
+            trusted_local_no_cloud_and_local_weights=settings.llm_trusted_local == 'true'))
+    if settings.llm_backend == 'external' and settings.llm_trusted_local is None:
+        return partial(LlmClient, OpenAICompatibleBackend(settings.llm_base_url, settings.llm_api_key or ''))
+    raise ValueError('invalid configuration')
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         app.state.settings = Settings()
+        app.state.llm_client_factory = None
         app.state.config_report = {"service": "generation-service", "status": "valid", "issues": [], "blocked_capabilities": []}
+        try:
+            app.state.llm_client_factory = configure_llm(app.state.settings)
+        except ValueError:
+            app.state.config_report = {"service": "generation-service", "status": "invalid",
+                "issues": [{"field": "llm", "code": "invalid_llm_config", "message": "Konfiguracja LLM jest niepoprawna."}],
+                "blocked_capabilities": ["llm"]}
     except (OSError, UnicodeError):
         app.state.settings = None
+        app.state.llm_client_factory = None
         app.state.config_report = {"service": "generation-service", "status": "invalid", "issues": [{"field": None, "code": "config_unreadable", "message": "Nie można odczytać konfiguracji."}], "blocked_capabilities": []}
     yield
 
