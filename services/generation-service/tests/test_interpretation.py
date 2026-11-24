@@ -256,9 +256,12 @@ def test_deep_json_and_overflow_are_safe_invalid_response():
 
 def test_ddl_conflict_for_distinct_command():
     service, fake, profile = setup('{"kind":"conflict","source":"ddl","reason":"id is required","object_id":"oid"}')
-    prepared = service.prepare_plan(PlanRequest(context=context(), order_revision_id='conflict-rev',
-                                                command='Create orders without an id'))
+    schema = context().model_copy(update={'ddl': 'CREATE TABLE orders (id int NOT NULL);'})
+    prepared = service.prepare_plan(PlanRequest(context=schema, order_revision_id='conflict-rev',
+                                                command='Create orders with id = NULL'))
     result = execute(service, fake, profile, prepared)
+    sent = fake.calls[0].messages[1].content
+    assert 'id int NOT NULL' in sent and 'id = NULL' in sent
     assert result.value.kind == 'conflict' and result.value.source == 'ddl'
     assert result.prepared.revision_id == result.measurement.revision_id == 'conflict-rev'
 
