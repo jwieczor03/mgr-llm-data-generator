@@ -1375,3 +1375,49 @@ przez SDK na poziomie DEBUG przed wysłaniem HTTP. Ustawienie obejmuje również
 kompozycję programową i ogranicza diagnostykę tych bibliotek; jest zależne
 od przypiętych wersji i wymaga ponownej weryfikacji przy ich zmianie. Logi
 aplikacji pozostają dostępne.
+
+### S5-T2: programowy kontrakt interpretacji (#56)
+
+**Ustalone przez architekta w procesie realizacji.** Generator udostępnia trzy
+operacje programowe: propozycje relacji, interpretację reguły i interpretację
+polecenia. Kompozycja `create_interpretation_service` przyjmuje fabrykę klienta
+z S5-T1 oraz jawny profil modelu z opcjami, limitem kontekstu, limitem wyjścia
+i konserwatywnym licznikiem tokenów dla dokładnych wiadomości tego modelu.
+Nie ma domyślnego modelu, licznika, budżetu ani terminu. Nie dodano trasy HTTP.
+
+Wywołujący najpierw tworzy odpowiedni DTO i wywołuje `prepare_relations`,
+`prepare_rule` albo `prepare_plan`. Wynik zawiera niezmienne przypięcie,
+pełne wersjonowane wiadomości oraz SHA-256 kanonicznego kontekstu, obejmującego
+również tożsamość promptu i profil. Hash manifestu DDL przekazany przez S2 jest
+osobnym polem, nie hashem kontekstu. DDL i katalog z identyfikatorami są
+przekazywane w całości. Zmiana danych, doprecyzowania, rewizji lub profilu
+wymaga nowego przygotowania i zgody. Przed wysłaniem danych zaufany wywołujący
+przedstawia dokładne wiadomości i odbiorcę zgodnie z procedurą prywatności
+S5-T1. Digest uzyskanej zgody oblicza według `disclosure_hash` z #55, używając
+przygotowanego hasha i wiadomości oraz rzeczywistego odbiorcy. Sam digest nie
+stanowi uzyskania zgody. Wyjątek dla zaufanego lokalnego transportu pozostaje
+wyłącznie na warunkach S5-T1.
+
+`interpret_relations`, `interpret_rule` i `interpret_plan` otrzymują ten sam
+wynik przygotowania, digest rzeczywistej zgody oraz bezwzględny deadline zegara
+pętli asyncio. Dla każdej próby powstaje świeży klient i jedno wywołanie;
+brak konfiguracji, budżetu, zgody lub poprawnego przygotowania blokuje wysyłkę.
+Walidacja odrzuca niejednoznaczny JSON, nieznane pola i obiekty. Propozycja
+relacji zawiera uporządkowane pary istniejących kolumn; pusta lista jest sukcesem.
+Propozycja reguły musi wskazać typ z przekazanego katalogu i wymagane parametry.
+Plan ma niepowtarzające się istniejące tabele i jawne nieujemne całkowite
+liczebności. Konflikt wskazuje DDL albo istniejącą zatwierdzoną regułę.
+Wyniki modelu pozostają propozycjami. Typy i wykonalność relacji sprawdza #29,
+semantykę i wykonalność reguł #33/OD-06, a aktualność rewizji, pełny zakres
+i zatwierdzenie planu #51. Nie ma solvera ani gwarancji jakości interpretacji.
+
+Wynik i bezpieczny błąd zawierają przypięcie oraz dostępny pomiar `Attempt`;
+błąd techniczny różni się od `invalid_model_response`. Przed faktycznym
+wywołaniem pomiar nie powstaje; po awarii transportu i błędnym JSON pozostaje
+dostępny. Anulowanie pozostaje anulowaniem zadania asyncio; wyjątek
+`InterpretationCancelled` przekazuje przypięcie i pomiar, jeśli wywołanie
+zdążyło się rozpocząć. Pomiar ma `preparation_operation_id`, `call_id`, projekt, wersję,
+hash DDL i odpowiednią rewizję. #52 i #62 odpowiadają za trwałe zapisanie,
+powiązanie z migawką i nienaliczanie tych samych pomiarów przy ponowieniu.
+Ta operacja nie implementuje bazy, idempotencji portu, integracji #29/#33/#51,
+wykonania S6 ani testu skali #58. Nie wykonano wywołań prawdziwych modeli.
