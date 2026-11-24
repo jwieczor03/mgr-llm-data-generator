@@ -338,10 +338,13 @@ class DdlRepository:
                     or AnalysisProfile.model_validate_json(version["analysis_profile"]) != profile):
                 raise ValueError("version mismatch")
             status = "SUCCEEDED" if analysis.supported else "REJECTED_DDL"
+            from application_api.relations import carry_forward, lock_project
+            project = lock_project(session, row["project_id"])
+            interpretation_id = uuid4()
             session.execute(text("""INSERT INTO app.schema_interpretations
                 (id, project_id, schema_version_id, revision_no, analysis_profile, analysis)
                 VALUES (:id,:project,:version,1,:profile,CAST(:analysis AS jsonb))"""),
-                {"id": uuid4(), "project": row["project_id"], "version": version["id"],
+                {"id": interpretation_id, "project": row["project_id"], "version": version["id"],
                  "profile": profile.model_dump_json(), "analysis": analysis.model_dump_json()})
             session.execute(text("UPDATE app.schema_versions SET status=:status WHERE id=:id"),
                             {"status": status, "id": version["id"]})
@@ -350,7 +353,9 @@ class DdlRepository:
                 {"id": attempt_id, "status": status,
                  "diagnostics": json.dumps([d.model_dump(mode="json") for d in analysis.diagnostics])})
             if analysis.supported:
+                carry_forward(session, row["project_id"], project["default_schema_version_id"], version["id"],
+                              interpretation_id, analysis)
                 session.execute(text("""UPDATE app.projects SET default_schema_version_id=:version,
-                    requirements_review_required=true WHERE id=:project"""),
+                    requirements_review_required=true, requirements_revision=requirements_revision+1 WHERE id=:project"""),
                     {"version": version["id"], "project": row["project_id"]})
             session.execute(text("UPDATE app.ddl_slot SET attempt_id=NULL WHERE singleton=1"))

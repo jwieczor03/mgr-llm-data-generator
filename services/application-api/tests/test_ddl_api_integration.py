@@ -750,3 +750,51 @@ def test_initial_content_rejection_is_terminal_without_default(client, db, sql, 
     with db.session() as session:
         assert session.execute(text('SELECT default_schema_version_id FROM app.projects WHERE id=:id'),
                                {'id': uuid.UUID(project)}).scalar_one() is None
+
+
+def test_relation_discovery_to_private_generation_http(client, db):
+    import socket
+    import subprocess
+    from pathlib import Path
+
+    import httpx
+    from application_api.relation_worker import RelationWorker
+
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+    generation = Path(__file__).resolve().parents[2] / 'generation-service'
+    process = subprocess.Popen(['uv', 'run', '--locked', '--no-sync', '--project', str(generation), 'python', str(generation / 'tests/relation_http_fixture.py'), str(port)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=generation)
+    worker = None
+    try:
+        def server_ready():
+            try:
+                return httpx.get(f'http://127.0.0.1:{port}/health/live', timeout=.5, trust_env=False).status_code == 200
+            except httpx.HTTPError:
+                return False
+        wait_for(server_ready)
+        project = client.post('/api/v1/projects', json={'name': 'Relations HTTP'}).json()['id']
+        root = f'/api/v1/projects/{project}'
+        attempt, page = str(uuid.uuid4()), str(uuid.uuid4())
+        path = f'{root}/ddl-attempts/{attempt}'
+        data = b'CREATE TABLE t (id int PRIMARY KEY);'
+        assert client.put(path, json={'page_id': page, 'files': [{'name': 'a.sql', 'size_bytes': len(data)}]}).status_code == 201
+        assert client.post(path + '/files', files=[('files', ('a.sql', data))], headers={'X-DDL-Page-ID': page}).status_code == 201
+        nonce = client.get(path, headers={'X-DDL-Page-ID': page}).json()['receipt_nonce']
+        version = client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': nonce}).json()['schema_version_id']
+        wait_for(lambda: client.get(path).json()['status'] == 'SUCCEEDED')
+        base = f'{root}/schema-versions/{version}'
+        worker = RelationWorker(db, client.app.state.artifacts, f'http://127.0.0.1:{port}')
+        worker.start()
+        response = client.post(base + '/relation-discoveries', json={'request_id': str(uuid.uuid4())})
+        assert response.status_code == 202, response.text
+        discovery_id = response.json()['discovery_id']
+        result = wait_for(lambda: (state if (state := client.get(base + '/relation-discoveries/' + discovery_id).json())['status'] in ('SUCCEEDED', 'FAILED') else None))
+        assert result['status'] == 'SUCCEEDED' and result['items'] == []
+        assert client.get(base + '/readiness').json()['ready'] is True
+    finally:
+        if worker:
+            worker.stop()
+        process.terminate()
+        process.wait(timeout=5)

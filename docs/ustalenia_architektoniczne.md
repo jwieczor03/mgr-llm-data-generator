@@ -1421,3 +1421,25 @@ hash DDL i odpowiednią rewizję. #52 i #62 odpowiadają za trwałe zapisanie,
 powiązanie z migawką i nienaliczanie tych samych pomiarów przy ponowieniu.
 Ta operacja nie implementuje bazy, idempotencji portu, integracji #29/#33/#51,
 wykonania S6 ani testu skali #58. Nie wykonano wywołań prawdziwych modeli.
+
+### S2-T5: realizacja relacji dodatkowych
+
+Przy realizacji #29 przyjęto trwały zapis prośby o propozycje, propozycji
+oraz niezmiennej decyzji dla konkretnej wersji i interpretacji schematu.
+Publikację DDL, propozycji i decyzji synchronizuje blokada projektu;
+zmiana wspólnej rewizji wymagań następuje w tej samej transakcji.
+Nowa obsługiwana wersja otrzymuje zatwierdzone wcześniej relacje jako
+propozycje do ponownego przeglądu. Brakujące obiekty pozostają widoczne
+z przyczyną i możliwością odrzucenia.
+
+Zgodność typów relacji obejmuje grupy liczb całkowitych i `numeric` oraz
+`text` i `varchar`; pozostałe typy obsługiwanego profilu wymagają zgodności
+nazwy. Docelowe kolumny muszą tworzyć pełny klucz główny lub unikalny.
+Cykl między tabelami jest niedopuszczalny; pojedyncze odwołanie do tej
+samej tabeli wymaga wariantu opcjonalnego i kolumn dopuszczających NULL.
+Ponowna walidacja grafu odbywa się podczas zatwierdzania.
+
+Osobny konsument utrwala wynik poszukiwania, bez ponawiania wywołania po
+awarii lub przekroczeniu terminu. Komunikacja z istniejącą interpretacją S5
+odbywa się prywatnym HTTP; konfiguracja modelu i ograniczeń kontekstu jest
+jawna. Bramka zgody S5 nadal obowiązuje dla niezaufanego dostawcy.

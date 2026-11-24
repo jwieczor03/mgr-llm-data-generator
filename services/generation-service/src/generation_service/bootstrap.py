@@ -15,6 +15,11 @@ from generation_service.llm_transports import OllamaBackend, OpenAICompatibleBac
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[2] / ".env", extra="ignore")
+    llm_tokenizer_byte_bound_confirmed: bool = False
+    llm_template_reserve_tokens: int | None = Field(default=None, ge=1)
+    llm_model: str | None = None
+    llm_context_tokens: int | None = Field(default=None, gt=0)
+    llm_output_tokens: int | None = Field(default=None, gt=0)
     llm_backend: str | None = None
     llm_base_url: str | None = None
     llm_api_key: str | None = Field(default=None, repr=False, exclude=True)
@@ -86,3 +91,34 @@ def ready(request: Request) -> dict:
                  "message": "Konfiguracja jest poprawna." if valid else "Konfiguracja jest niedostępna.", "limitations": []}],
             "limitations": ["Serwis jest szkieletem. Generowanie i walidacja danych nie są jeszcze zaimplementowane.",
                             "Nie sprawdzono dostawcy ani modelu LLM; nie wykonuje się płatnych prób."]}
+
+
+@app.post('/internal/v1/relation-proposals')
+async def relation_proposals(request: Request):
+    """Private service boundary; never return input or provider exception details."""
+    import asyncio
+
+    from fastapi.responses import JSONResponse
+
+    from generation_service.interpretation import InterpretationError, RelationRequest
+
+    try:
+        body = await request.body()
+        payload = RelationRequest.model_validate_json(body)
+        settings = request.app.state.settings
+        if (not settings or not settings.llm_model or not settings.llm_context_tokens or not settings.llm_output_tokens
+                or not settings.llm_tokenizer_byte_bound_confirmed or not settings.llm_template_reserve_tokens):
+            raise ValueError('profile unavailable')
+        # The operator confirms a byte upper bound for the configured tokenizer and
+        # supplies a reserve for its complete chat template, including framing.
+        profile = Profile(settings.llm_model, (), settings.llm_context_tokens, settings.llm_output_tokens,
+                          lambda messages: sum(len(m.content.encode('utf-8')) for m in messages) + settings.llm_template_reserve_tokens)
+        service = create_interpretation_service(request.app.state.llm_client_factory, profile)
+        prepared = service.prepare_relations(payload)
+        result = await service.interpret_relations(prepared, deadline=asyncio.get_running_loop().time() + 110,
+                                                   disclosure_digest=None)
+        return result.value.model_dump(mode='json')
+    except (ValueError, InterpretationError):
+        return JSONResponse(status_code=422, content={'error': {'code': 'RELATION_INTERPRETATION_FAILED'}})
+    except Exception:
+        return JSONResponse(status_code=503, content={'error': {'code': 'RELATION_INTERPRETATION_UNAVAILABLE'}})

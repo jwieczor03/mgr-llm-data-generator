@@ -566,3 +566,38 @@ aplikacji pozostają dostępne. Przy aktualizacji SDK należy ponownie sprawdzi�
 tę ochronę. Adapter zewnętrzny usuwa obce nagłówki SDK na granicy HTTP i używa
 wyłącznie jawnie skonfigurowanego klucza. Szczegóły i wynik audytu osobnego
 drzewa LiteLLM są w rejestrze ustaleń.
+
+#### Propozycje dodatkowych relacji
+
+Wyszukiwanie relacji wymaga skonfigurowania `GENERATION_SERVICE_URL` w
+`application-api` oraz profilu w `generation-service`: `LLM_BACKEND=ollama`,
+`LLM_BASE_URL`, `LLM_TRUSTED_LOCAL=true`, `LLM_MODEL`, `LLM_CONTEXT_TOKENS`
+i `LLM_OUTPUT_TOKENS`. Operator musi zweryfikować, że liczba bajtów UTF-8
+ogranicza z góry liczbę tokenów wybranego tokenizera, oraz że rezerwa
+`LLM_TEMPLATE_RESERVE_TOKENS` obejmuje cały szablon i znaczniki wiadomości;
+potwierdzenie ustawia przez `LLM_TOKENIZER_BYTE_BOUND_CONFIRMED=true`.
+Brak potwierdzenia lub rezerwy powoduje odmowę wywołania. Te ustawienia nie
+są dowodem, że model działa ani że jego kontekst pomieści konkretny schemat.
+Zewnętrzny dostawca nadal wymaga istniejącej zgody na ujawnienie danych;
+ten przepływ nie wystawia operacji jej uzyskania.
+
+Ręczny odbiór backendu (panel relacji S2-T6 powstaje osobno):
+
+1. Utwórz projekt i wgraj poprawny DDL z jawnym kluczem obcym. Odczytaj
+   `/api/v1/projects/{project_id}/schema-versions/{version_id}/relations`;
+   FK ma źródło `DDL` i nie wymaga decyzji. Zachowaj pobrane pliki DDL do porównania.
+2. Przy skonfigurowanym, zaufanym lokalnym modelu wyślij `POST` do
+   `/relation-discoveries` względem tej wersji z `{"request_id":"<UUID v4>"}`.
+   Odpytuj `GET /relation-discoveries/{discovery_id}` do stanu końcowego.
+   Pusta lista nie blokuje gotowości; błąd nie jest pustym sukcesem.
+3. Dla otrzymanej propozycji sprawdź `GET /readiness`, następnie wyślij
+   `POST /relation-proposals/{proposal_id}/decision` z `expected_revision`,
+   `decision: "APPROVE"` i jawnym `reference_required: true` albo `false`.
+   Powtórz tę samą decyzję i sprawdź, że wynik nie tworzy drugiej decyzji;
+   odmienna decyzja dla tej rewizji zwraca konflikt. Pobierz DDL i porównaj
+   z oryginałem. Dla niepoprawnej propozycji zatwierdzenie ma zwrócić 422,
+   a świadome `REJECT` pozwolić zakończyć jej przegląd.
+4. Wgraj nową wersję DDL. Wcześniej zatwierdzona relacja powinna być ponownie
+   nierozpatrzoną propozycją, także gdy jej kolumny zniknęły; po decyzji
+   sprawdź, że znikła wyłącznie blokada jej przeglądu. Testy danych i gotowość
+   innych obszarów produktu są przedmiotem oddzielnych zadań.
