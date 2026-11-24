@@ -559,3 +559,10 @@ W kodzie wybór strategii i promptu jest niezależny: implementacja protokołu
 strategii lub promptu wymaga jawnego wyboru kodu wywołującego. Test
 `test_manual_strategy_switch_preserves_snapshot` pokazuje dwa warianty na tej
 samej migawce. Nie ma jeszcze gotowych strategii generowania ani promptów produktu.
+
+Serwis wycisza logi bibliotek `openai`, `httpx` i `httpcore`, ponieważ
+przypięte SDK może na poziomie DEBUG zapisać pełne wiadomości. Logi samej
+aplikacji pozostają dostępne. Przy aktualizacji SDK należy ponownie sprawdzić
+tę ochronę. Adapter zewnętrzny usuwa obce nagłówki SDK na granicy HTTP i używa
+wyłącznie jawnie skonfigurowanego klucza. Szczegóły i wynik audytu osobnego
+drzewa LiteLLM są w rejestrze ustaleń.

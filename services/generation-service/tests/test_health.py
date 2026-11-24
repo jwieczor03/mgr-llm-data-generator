@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from generation_service.bootstrap import app
 
@@ -47,6 +48,17 @@ def test_invalid_llm_configuration_does_not_expose_values(monkeypatch):
 
 def test_empty_llm_setting_activates_validation(monkeypatch):
     monkeypatch.setenv('LLM_BACKEND', '')
+    with TestClient(app) as client:
+        assert client.get('/health/config').json()['status'] == 'invalid'
+        assert app.state.llm_client_factory is None
+
+
+@pytest.mark.parametrize('url', ['https://example.invalid/\npath', 'https://example.invalid?',
+                                 'https://example.invalid#', 'https://@example.invalid'])
+def test_malformed_url_is_rejected_without_network(monkeypatch, url):
+    monkeypatch.setenv('LLM_BACKEND', 'external')
+    monkeypatch.setenv('LLM_BASE_URL', url)
+    monkeypatch.setenv('LLM_API_KEY', 'fake-secret')
     with TestClient(app) as client:
         assert client.get('/health/config').json()['status'] == 'invalid'
         assert app.state.llm_client_factory is None

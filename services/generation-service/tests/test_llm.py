@@ -1,5 +1,8 @@
 import asyncio
 import json
+import os
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import replace
@@ -88,6 +91,7 @@ def test_ollama_payload_measurements_no_cache(server):
         assert body['truncate'] is False and body['shift'] is False
         assert body['messages'][0]['content'] == 'data'
         assert body['options']['num_predict'] == 20
+        assert dict(client.attempts[0].options) == {'num_ctx': 100, 'num_predict': 20}
         assert 'authorization' not in {k.lower() for k in headers}
         assert all(a.usage.input_tokens is None and a.usage.cost is None for a in client.attempts)
         assert cost_subtotal(client.attempts, 'USD').partial
@@ -108,6 +112,7 @@ def test_external_gate_and_single_request_on_failure(server):
         approved = replace(base, disclosure_digest=disclosure_hash(base, client.transport.recipient))
         assert (await client.complete(approved)).text == 'ok'
         assert requests[0][1]['store'] is False
+        assert dict(client.attempts[0].options) == {'max_completion_tokens': 20}
         assert 'fake-secret' not in repr(client.attempts)
         with pytest.raises(PreflightError):
             await client.complete(replace(approved, messages=(Message('user', 'changed'),)))
@@ -244,3 +249,59 @@ def test_loopback_timeout_and_cancellation_after_request(server):
             await task
         assert client.attempts[-1].status == 'cancelled'
     run(scenario())
+
+
+def test_ambient_headers_cannot_override_explicit_configuration(server, monkeypatch):
+    monkeypatch.setenv('OPENAI_CUSTOM_HEADERS', 'Authorization: Bearer ambient-secret\nX-Ambient: hidden\nContent-Type: text/plain')
+    monkeypatch.setenv('OPENAI_ORG_ID', 'ambient-org')
+    monkeypatch.setenv('OPENAI_PROJECT_ID', 'ambient-project')
+    monkeypatch.setenv('OPENAI_ADMIN_KEY', 'ambient-admin')
+
+    async def scenario():
+        endpoint, requests = server
+        client = LlmClient(OpenAICompatibleBackend(endpoint + '/v1', 'explicit-fake-key'))
+        request = call()
+        request = replace(request, disclosure_digest=disclosure_hash(request, client.transport.recipient))
+        await client.complete(request)
+        headers = {key.lower(): value for key, value in requests[0][2].items()}
+        assert headers['authorization'] == 'Bearer explicit-fake-key'
+        assert headers['content-type'] == 'application/json'
+        assert not {'x-ambient', 'openai-organization', 'openai-project'} & headers.keys()
+        assert 'ambient' not in repr(headers)
+    run(scenario())
+
+
+def test_debug_logging_in_fresh_process_does_not_expose_requests(server):
+    endpoint, requests = server
+    script = r"""
+import asyncio, logging, sys
+from dataclasses import replace
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('openai._base_client').addHandler(logging.StreamHandler())
+logging.getLogger('httpcore.connection').addHandler(logging.StreamHandler())
+from generation_service.llm import Call, Identity, LlmClient, Message, TechnicalError, disclosure_hash
+from generation_service.llm_transports import OpenAICompatibleBackend
+logging.getLogger('openai._base_client').setLevel(logging.DEBUG)
+logging.getLogger('httpx').setLevel(logging.DEBUG)
+logging.getLogger('httpcore').setLevel(logging.DEBUG)
+async def main():
+    client = LlmClient(OpenAICompatibleBackend(sys.argv[1] + '/v1', 'KEY_SENTINEL'))
+    for model in ('test-model', 'failure'):
+        request = Call('operation', 'snapshot', Identity('s', '1'), Identity('p', '1'), model,
+            (Message('user', 'PROMPT_SENTINEL'),), {}, 10, 100, 20, asyncio.get_running_loop().time() + 3)
+        request = replace(request, disclosure_digest=disclosure_hash(request, client.transport.recipient))
+        try:
+            await client.complete(request)
+        except TechnicalError:
+            pass
+    logging.getLogger('application').warning('APP_LOG_VISIBLE')
+asyncio.run(main())
+"""
+    env = os.environ.copy()
+    env.update(OPENAI_LOG='debug', OPENAI_CUSTOM_HEADERS='X-Private: AMBIENT_SENTINEL')
+    process = subprocess.run([sys.executable, '-c', script, endpoint], env=env,
+                             capture_output=True, text=True, timeout=15, check=True)
+    output = process.stdout + process.stderr
+    assert 'APP_LOG_VISIBLE' in output
+    assert all(secret not in output for secret in ('PROMPT_SENTINEL', 'KEY_SENTINEL', 'AMBIENT_SENTINEL'))
+    assert len(requests) == 2

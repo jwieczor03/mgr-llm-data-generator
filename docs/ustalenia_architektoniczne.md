@@ -1352,3 +1352,26 @@ Audyt zależności produkcyjnych po imporcie SDK: `uv export --locked --project
 services/generation-service --no-dev --no-emit-project --no-hashes` oraz
 `pip-audit 2.10.1 --disable-pip --no-deps` dla pełnego eksportu: brak znanych
 podatności w chwili sprawdzenia. Lock zawiera hashe artefaktów.
+
+**Dowód przeglądu drzewa LiteLLM:** kwalifikację wykonano dla oficjalnego
+`litellm==1.110.2` bez extras, osobno od runtime serwisu. Tymczasowy projekt Python 3.14 z jedyną zależnością
+`litellm==1.110.2` rozwiązano 24 listopada 2026 za pomocą `uv lock`. Jego
+lock ma SHA-256
+`6e95b9a3012e54b672e98e2079ffea62979c541bff87c1e13e1c984fc88ce504`
+i obejmuje 63 pakiety łącznie z lokalnym projektem kwalifikacyjnym. Artefakty
+pobrano z PyPI, z hashami w locku; PyPI podaje też poświadczenie pochodzenia
+wydania LiteLLM 1.110.2 dla taga `c3cafa3`. To nie jest dowód braku luk.
+Eksport całego drzewa (`uv export --locked --project <katalog-tymczasowego-projektu>
+--no-emit-project --no-hashes`) sprawdzono `pip-audit 2.10.1 --disable-pip --no-deps`; wynik:
+brak znanych podatności w chwili audytu. Kontrola dotyczyła znanych zgłoszeń
+przypiętych wersji, nie stanowi analizy kodu ani gwarancji bezpieczeństwa.
+Ponowne rozwiązanie drzewa w przyszłości może wybrać inne wersje zależności;
+hash identyfikuje zbadany lock. Nie dodano LiteLLM do runtime serwisu.
+
+**Ochrona logów SDK:** dedykowany proces serwisu po imporcie SDK wycisza
+namespace `openai`, `httpx` i `httpcore`, w tym istniejące loggery potomne;
+logger `openai._base_client` jest wyłączony. Wynika to z logowania wiadomości
+przez SDK na poziomie DEBUG przed wysłaniem HTTP. Ustawienie obejmuje również
+kompozycję programową i ogranicza diagnostykę tych bibliotek; jest zależne
+od przypiętych wersji i wymaga ponownej weryfikacji przy ich zmianie. Logi
+aplikacji pozostają dostępne.

@@ -2,6 +2,7 @@
 
 import ipaddress
 import json
+import logging
 from urllib.parse import urlsplit
 
 import httpx
@@ -11,9 +12,33 @@ from openai import AsyncOpenAI
 from generation_service.llm import Call, Response, TechnicalError, Usage
 
 
+def _protect_transport_logs() -> None:
+    # This service owns these SDK logging namespaces; request options may contain prompts.
+    namespaces = ('openai', 'httpx', 'httpcore')
+    known = list(logging.Logger.manager.loggerDict)
+    for name in set(namespaces) | {n for n in known if n.startswith(tuple(f'{p}.' for p in namespaces))}:
+        logger = logging.getLogger(name)
+        logger.handlers.clear()
+        logger.addHandler(logging.NullHandler())
+        logger.propagate = False
+    logging.getLogger('openai._base_client').disabled = True
+
+
+_protect_transport_logs()
+
+
 def _endpoint(url: str, *, ollama: bool = False) -> str:
-    parts = urlsplit(url)
-    if parts.scheme not in {'http', 'https'} or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+    if not isinstance(url, str) or any(ord(c) < 33 or ord(c) == 127 for c in url):
+        raise ValueError('invalid endpoint')
+    try:
+        raw = urlsplit(url)
+        if raw.username is not None or raw.password is not None or '?' in url or '#' in url:
+            raise ValueError('invalid endpoint')
+        parsed = httpx.URL(url)
+        parts = urlsplit(str(parsed))
+    except (httpx.InvalidURL, ValueError):
+        raise ValueError('invalid endpoint') from None
+    if parts.scheme not in {'http', 'https'} or not parts.hostname or parts.username is not None or parts.password is not None or parts.query or parts.fragment:
         raise ValueError('invalid endpoint')
     try:
         port = parts.port
@@ -29,7 +54,7 @@ def _endpoint(url: str, *, ollama: bool = False) -> str:
         raise ValueError('HTTPS required')
     if ollama and parts.path not in ('', '/'):
         raise ValueError('invalid Ollama path')
-    return url.rstrip('/')
+    return str(parsed).rstrip('/')
 
 
 class _OllamaTransport(httpx.AsyncBaseTransport):
@@ -48,6 +73,28 @@ class _OllamaTransport(httpx.AsyncBaseTransport):
         payload = json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode()
         headers['content-length'] = str(len(payload))
         clean = httpx.Request('POST', request.url, headers=headers, content=payload)
+        return await self.delegate.handle_async_request(clean)
+
+    async def aclose(self) -> None:
+        await self.delegate.aclose()
+
+
+class _ExternalTransport(httpx.AsyncBaseTransport):
+    """Discard SDK/environment headers at the last boundary before network I/O."""
+
+    def __init__(self, endpoint: str, api_key: str):
+        self.expected = httpx.URL(endpoint + '/chat/completions')
+        self.api_key = api_key
+        self.delegate = httpx.AsyncHTTPTransport(retries=0, trust_env=False)
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.method != 'POST' or request.url != self.expected:
+            raise ValueError('unexpected external request')
+        clean = httpx.Request('POST', request.url, headers={
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        }, content=await request.aread(), extensions=request.extensions)
         return await self.delegate.handle_async_request(clean)
 
     async def aclose(self) -> None:
@@ -92,7 +139,8 @@ class OpenAICompatibleBackend:
         self._api_key = api_key
 
     async def send(self, call: Call) -> Response:
-        async with httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=None) as http:
+        async with httpx.AsyncClient(transport=_ExternalTransport(self.endpoint, self._api_key),
+                                     trust_env=False, follow_redirects=False, timeout=None) as http:
             async with AsyncOpenAI(base_url=self.endpoint, api_key=self._api_key, max_retries=0, timeout=None, http_client=http) as client:
                 result = await client.chat.completions.create(
                     model=call.model, messages=[{'role': m.role, 'content': m.content} for m in call.messages],

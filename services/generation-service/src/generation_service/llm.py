@@ -135,6 +135,11 @@ class LlmClient:
         remaining = call.deadline - asyncio.get_running_loop().time()
         if not math.isfinite(call.deadline) or remaining <= 0:
             raise PreflightError('deadline expired')
+        model_options = dict(call.options)
+        if self.transport.backend == 'ollama':
+            model_options.update(num_ctx=call.max_context_tokens, num_predict=call.output_tokens)
+        elif self.transport.backend == 'external_api':
+            model_options['max_completion_tokens'] = call.output_tokens
         started = time.monotonic()
         status, usage, actual_model = 'error', Usage(), None
         try:
@@ -162,7 +167,7 @@ class LlmClient:
         finally:
             self.attempts.append(Attempt(call.operation_id, str(uuid.uuid4()), call.snapshot_hash,
                                          call.strategy, call.prompt, self.transport.backend, call.model, actual_model,
-                                         tuple(sorted(call.options.items())), time.monotonic() - started,
+                                         tuple(sorted(model_options.items())), time.monotonic() - started,
                                          status, usage))
 
 
