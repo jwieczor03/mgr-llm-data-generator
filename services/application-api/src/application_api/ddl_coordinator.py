@@ -91,7 +91,8 @@ class DdlCoordinator:
     def _step(self, repo, row, recovery):
         attempt, status = row["id"], row["status"]
         if status in PRE_ACK and (recovery or row["lease_expires_at"] <= now()):
-            repo.begin_cleanup(row["project_id"], attempt, "EXPIRED")
+            repo.begin_cleanup(row["project_id"], attempt, "EXPIRED", pre_ack_only=True,
+                               expired_only=not recovery)
             return
         if status in ("CANCELLING", "CLEANUP_FAILED"):
             if self.worker_attempt == attempt and self.worker:

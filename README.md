@@ -82,7 +82,7 @@ schematu i zależności. Poprawna wersja otrzymuje `SUCCEEDED` i staje się
 domyślną dla nowych zleceń. Nieobsługiwany lub błędny DDL otrzymuje
 `REJECTED_DDL` z diagnostyką; oryginalne pliki i wcześniejsza wersja domyślna
 pozostają dostępne. Nie wykonujemy przesłanego DDL w bazie aplikacji;
-próbny import należy do S7. Interfejs przesyłania należy do S2-T6.
+próbny import należy do S7. Interfejs przesyłania jest dostępny w panelu „Projekty”.
 
 Opcjonalne ustawienia `application-api` to `DDL_MAX_FILES` (domyślnie 1024),
 `DDL_MAX_TOTAL_BYTES` i `DDL_MAX_FILE_BYTES` (oba 67108864),
@@ -395,7 +395,7 @@ curl -i -X POST http://127.0.0.1:8000/api/v1/projects -H 'Content-Type: applicat
 ```
 
 Ostatnie żądanie zwraca 409. Po restarcie backendu ponów odczyt projektu;
-dane pozostają w bazie. Interfejs projektów należy do S2-T6.
+dane pozostają w bazie. Projekty można również tworzyć i wybierać w panelu „Projekty”.
 
 ## Konfiguracja backendów
 
@@ -581,7 +581,7 @@ są dowodem, że model działa ani że jego kontekst pomieści konkretny schemat
 Zewnętrzny dostawca nadal wymaga istniejącej zgody na ujawnienie danych;
 ten przepływ nie wystawia operacji jej uzyskania.
 
-Ręczny odbiór backendu (panel relacji S2-T6 powstaje osobno):
+Ręczny odbiór backendu:
 
 1. Utwórz projekt i wgraj poprawny DDL z jawnym kluczem obcym. Odczytaj
    `/api/v1/projects/{project_id}/schema-versions/{version_id}/relations`;
@@ -601,3 +601,16 @@ Ręczny odbiór backendu (panel relacji S2-T6 powstaje osobno):
    nierozpatrzoną propozycją, także gdy jej kolumny zniknęły; po decyzji
    sprawdź, że znikła wyłącznie blokada jej przeglądu. Testy danych i gotowość
    innych obszarów produktu są przedmiotem oddzielnych zadań.
+
+### Ręczny odbiór panelu projektów
+
+Po uruchomieniu środowiska otwórz aplikację na porcie 8000 i wybierz
+„Projekty”. Utwórz dwa projekty, wybierz jeden i w sekcji DDL dodaj kilka
+plików SQL. Zmień ich kolejność i wyślij pełną paczkę. Sprawdź zapis plików,
+stan analizy oraz manifest domyślnej wersji. W sekcji Struktura wyszukaj
+tabelę po pełnej nazwie; w Relacjach sprawdź rozróżnienie źródeł i decyzję
+o obowiązkowości. Przy kolejnej analizie wybierz przerwanie, najpierw wróć
+do pracy, a następnie potwierdź usunięcie częściowego wyniku. Sprawdź, że
+wcześniejszy schemat pozostał dostępny. Powtórz kontrolę w dwóch kartach,
+obu motywach oraz przy szerokościach 390 i 1280 px. Kontrola reguł S3 nie
+jest jeszcze dostępna; gotowość przedstawia wyłącznie wynik serwera.

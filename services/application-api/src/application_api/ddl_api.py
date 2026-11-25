@@ -193,6 +193,19 @@ def cancel(project_id: UUID, attempt_id: UUID4, request: Request, data: Page | N
     return JSONResponse(status_code=200 if state == "CANCELLED" else 202, content={"status": state})
 
 
+@router.post("/ddl-attempts/{attempt_id}/abandon")
+def abandon(project_id: UUID, attempt_id: UUID4, data: Page, request: Request):
+    _, repo = access(request, project_id)
+    # Check existence without the page-restricted GET, then arbitrate under the ACK locks.
+    with repo.database.session() as session:
+        exists = session.execute(text("SELECT 1 FROM app.ddl_attempts WHERE project_id=:project AND id=:id"),
+                                 {"project": project_id, "id": attempt_id}).first()
+    if not exists:
+        raise ProjectError(404, "DDL_ATTEMPT_NOT_FOUND", "Nie znaleziono próby.")
+    state = repo.begin_cleanup(project_id, attempt_id, "CANCELLED", data.page_id, pre_ack_only=True)
+    return Response(status_code=202 if state == "CANCELLING" else 204)
+
+
 @router.get("/ddl-processing")
 def processing(project_id: UUID, request: Request):
     actor, repo = access(request, project_id)

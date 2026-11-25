@@ -836,3 +836,19 @@ def test_relation_discovery_to_private_generation_http(client, db):
             worker.stop()
         process.terminate()
         process.wait(timeout=5)
+
+
+def test_abandon_only_applies_before_ack(client):
+    client.app.state.ddl_coordinator.stop()
+    project = client.post('/api/v1/projects', json={'name': 'Abandon'}).json()['id']
+    root = f'/api/v1/projects/{project}/ddl-attempts'
+    page, attempt = str(uuid.uuid4()), str(uuid.uuid4())
+    path = f'{root}/{attempt}'
+    data = b'CREATE TABLE t(id int);'
+    assert client.post(f'{root}/{uuid.uuid4()}/abandon', json={'page_id': page}).status_code == 404
+    assert client.put(path, json={'page_id': page, 'files': [{'name': 'a.sql', 'size_bytes': len(data)}]}).status_code == 201
+    assert client.post(path + '/abandon', json={'page_id': str(uuid.uuid4())}).status_code == 409
+    staged = client.post(path + '/files', files=[('files', ('a.sql', data))], headers={'X-DDL-Page-ID': page}).json()
+    assert client.post(path + '/receipt', json={'page_id': page, 'receipt_nonce': staged['receipt_nonce']}).status_code == 202
+    assert client.post(path + '/abandon', json={'page_id': page}).status_code == 204
+    assert client.get(path).json()['status'] == 'ANALYSIS_PENDING'
