@@ -111,3 +111,47 @@ def test_crashed_worker_recovery_schedules_durable_backoff(db):
                 assert row.diagnostics[0]["code"] == "DDL_WORKER_FAILED"
                 assert repo.launch(attempt) is None
                 session.execute(text("UPDATE app.ddl_attempts SET next_attempt_at=now() WHERE id=:id"), {"id": attempt})
+
+
+def test_abandon_and_expiration_recheck_locked_state(db, tmp_path):
+    from datetime import timedelta
+
+    from application_api.ddl_coordinator import DdlCoordinator
+    from application_api.ddl_repository import now
+
+    db.start()
+    project, page, attempt, artifact = (uuid.uuid4() for _ in range(4))
+    with db.session() as session:
+        session.execute(text("INSERT INTO app.projects (id,owner_subject,name,name_key,created_at) VALUES (:id,'o','race','race',now())"), {"id": project})
+    repo = DdlRepository(db)
+    repo.reserve(project, 'o', attempt, page, [{'name': 'a.sql', 'size_bytes': 8}])
+    _, epoch = repo.start_receiving(project, attempt, page)
+    repo.journal(project, attempt, epoch, artifact)
+    nonce = repo.staged(project, attempt, epoch, [{'id': uuid.uuid4(), 'position': 0, 'name': 'a.sql', 'size_bytes': 8, 'sha256': '0' * 64, 'artifact_id': artifact}])
+    stale = dict(repo.current())
+    stale['lease_expires_at'] = now() - timedelta(seconds=1)
+    repo.renew(project, attempt, page)
+    coordinator = DdlCoordinator(db, None, tmp_path)
+    coordinator._step(repo, stale, False)
+    assert repo.get(project, attempt, page)['status'] == 'STAGED'
+    repo.acknowledge(project, attempt, page, nonce)
+    coordinator._step(repo, stale, False)
+    assert repo.begin_cleanup(project, attempt, 'CANCELLED', page, pre_ack_only=True) is None
+    assert repo.get(project, attempt, page)['status'] == 'ANALYSIS_PENDING'
+
+
+def test_abandon_before_ack_fences_receipt(db):
+    db.start()
+    project, page, attempt, artifact = (uuid.uuid4() for _ in range(4))
+    with db.session() as session:
+        session.execute(text("INSERT INTO app.projects (id,owner_subject,name,name_key,created_at) VALUES (:id,'o','fence','fence',now())"), {'id': project})
+    repo = DdlRepository(db)
+    repo.reserve(project, 'o', attempt, page, [{'name': 'a.sql', 'size_bytes': 8}])
+    _, epoch = repo.start_receiving(project, attempt, page)
+    repo.journal(project, attempt, epoch, artifact)
+    nonce = repo.staged(project, attempt, epoch, [{'id': uuid.uuid4(), 'position': 0, 'name': 'a.sql', 'size_bytes': 8, 'sha256': '0' * 64, 'artifact_id': artifact}])
+    assert repo.begin_cleanup(project, attempt, 'CANCELLED', page, pre_ack_only=True) == 'CANCELLING'
+    with pytest.raises(InputError, match='DDL_ATTEMPT_CLOSED'):
+        repo.acknowledge(project, attempt, page, nonce)
+    with db.session() as session:
+        assert session.execute(text('SELECT count(*) FROM app.schema_versions WHERE attempt_id=:id'), {'id': attempt}).scalar_one() == 0

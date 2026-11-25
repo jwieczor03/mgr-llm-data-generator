@@ -226,6 +226,15 @@ hash nie zastępuje kontroli dostępu. Poprawne powtórzenie zwraca istniejącą
 wersję bez nowego uruchomienia. Anulowana lub wygasła próba nie odzyskuje
 aktywności dzięki dawnemu nonce.
 
+**Wyjście strony i wyścig dzierżawy — decyzja architekta S2-T6.**
+Rzeczywiste `pagehide` przed potwierdzonym ACK wysyła `abandon` z identyfikatorem
+strony. Pod blokadami slotu i próby, w kolejności jak przy ACK, serwer kieruje
+wyłącznie stan przed ACK do sprzątania `CANCELLED`; po ACK jest to no-op.
+`beforeunload` tylko ostrzega, a pozostanie na stronie nie anuluje transferu.
+Koordynator ponownie sprawdza pod tymi blokadami stan przed ACK i wygaśnięcie
+aktualnej dzierżawy; przy odzyskiwaniu po starcie wystarcza stan przed ACK.
+Ręczne anulowanie pozostaje osobną operacją również dla rozpoczętej analizy.
+
 **Nazwy i zbiorcza walidacja.** Rezerwacja przechowuje uporządkowaną surową
 listę nazw i rozmiarów jako JSON oraz jej hash. Nie nakładamy na nią
 unikalności nazw, która przerwałaby sprawdzanie pierwszego konfliktu.

@@ -187,12 +187,20 @@ class DdlRepository:
                 receipt_nonce_hash=:hash, lease_expires_at=NULL WHERE id=:id"""), {"id": attempt_id, "hash": nonce_hash})
             return version_id
 
-    def begin_cleanup(self, project_id, attempt_id, target, page_id=None, diagnostics=None, *, upload_epoch=None):
+    def begin_cleanup(self, project_id, attempt_id, target, page_id=None, diagnostics=None, *, upload_epoch=None,
+                      pre_ack_only=False, expired_only=False):
         with self.database.session() as session:
             slot = _slot(session)
             row = _attempt(session, project_id, attempt_id)
             if row is None:
                 return None
+            if pre_ack_only:
+                if row['status'] not in PRE_ACK:
+                    return None
+                if page_id is not None:
+                    _page(row, page_id)
+                if expired_only and row['lease_expires_at'] > now():
+                    return None
             # A failed upload may clean up only the same still-unacknowledged transfer.
             if upload_epoch is not None and (row["status"] not in PRE_ACK or row["execution_epoch"] != upload_epoch):
                 return None

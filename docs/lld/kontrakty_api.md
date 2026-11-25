@@ -444,3 +444,14 @@ To kandydaci profili, nie wybór obsługi całego PostgreSQL.
 Proponowane minimum raportu: `report_version`, identyfikacja projektu/wykonania, hash migawki, wariant, status/powód, wybrany kandydat i manifest, walidacja/metoda, oczekiwane/rzeczywiste liczebności, reguły, rundy, czasy i pomiary z dostępnością.
 
 Raport ma stabilny `candidate_id` i `validation_report_id`. Paczka nie wybiera „ostatniego pliku z katalogu”. Błąd pobierania po zakończeniu jest błędem dostarczenia artefaktu, nie powodem ponownej generacji.
+
+### S2-T6 — porzucenie strony przed ACK
+
+`POST /api/v1/projects/{project_id}/ddl-attempts/{attempt_id}/abandon`
+przyjmuje wymagane `{"page_id": "UUID v4"}`. `202` oznacza zlecenie
+sprzątania niepotwierdzonej próby, `204` brak działania (także po ACK),
+a `404` brak dostępnej próby. Przed ACK identyfikator strony musi pasować.
+Operacja współdzieli blokady z ACK i nie zastępuje ręcznego `cancel`.
+
+Kontrola reguł S3 nie ma jeszcze endpointu: UI wyświetla wszystkie blokady
+zwrócone przez readiness, ale nie wylicza samodzielnie gotowości reguł.

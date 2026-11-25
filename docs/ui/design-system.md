@@ -232,3 +232,16 @@ To małe rozszerzenie ekranu technicznego, bez nowej makiety produktu.
 Implementację należy obejrzeć w rzeczywistej przeglądarce, w obu motywach,
 z klawiaturą i przy szerokościach 390 oraz 1280 px; sprawdzić również
 błąd i brak poziomego przewijania. Zapis decyzji nie potwierdza tych kontroli.
+
+### Panel projektów S2-T6 — decyzja designera
+
+Przycisk „Projekty” otwiera nazwany natywny dialog nad dotychczasowym
+widokiem. Wybór projektu to natywny select z wyglądem i obsługą systemową.
+Po lewej jest wybór zapisanego lub tworzenie projektu, po prawej
+jego dane i przełączniki DDL, Struktura i Relacje; do 720 px układ jest
+jednokolumnowy. Gotowość jest osobna od stanu analizy. Lista plików daje
+przyciski zmiany kolejności, struktura wyszukiwanie pełnej nazwy tabeli
+i szczegóły jednej tabeli. Relacje DDL i dodatkowe są oddzielone; wybór
+obowiązkowości jest jawny. Potwierdzenie przerwania początkowo skupia
+„Kontynuuj analizę” i wyjaśnia usunięcie plików oraz częściowego wyniku.
+Wykorzystujemy istniejące tokeny obu motywów. Decyzja nie oznacza odbioru.

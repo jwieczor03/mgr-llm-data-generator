@@ -1,0 +1,25 @@
+.projects-dialog { width: min(1100px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--canvas); color: var(--text); overflow: auto; }
+dialog::backdrop { background: rgb(0 0 0 / .55); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: start; gap: 20px; }
+.eyebrow { color: var(--muted); margin: 0; }
+.projects-layout { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 3fr); gap: 24px; }
+.project-list { list-style: none; padding: 0; }
+.project-list button { width: 100%; text-align: left; border-radius: var(--radius-sm); }
+.project-list button[aria-current] { border-color: var(--accent); background: var(--subtle); }
+.project-content { min-width: 0; }
+.project-content section { margin: 16px 0; }
+.project-content label { display: block; font-weight: bold; margin: 12px 0; }
+.project-content input:not([type=radio]), .project-content textarea { display: block; width: 100%; max-width: 100%; margin-top: 6px; padding: 10px; background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--radius-sm); color: var(--text); font: inherit; }
+.project-content textarea { min-height: 100px; resize: none; }
+.project-content fieldset { border: 1px solid var(--border); margin: 12px 0; }
+.project-content fieldset label { font-weight: normal; }
+.project-content article { border-top: 1px solid var(--border); padding: 12px 0; }
+.identifier { font-family: monospace; overflow-wrap: anywhere; }
+.projects-dialog dialog { color: var(--text); background: var(--canvas); border: 1px solid var(--border); border-radius: var(--radius-md); max-width: min(500px, calc(100vw - 32px)); padding: 24px; }
+@media (max-width: 720px) { .projects-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 18px; } .projects-layout { grid-template-columns: 1fr; gap: 8px; } }
+.projects-layout nav label, .projects-layout nav select { display: block; width: 100%; }
+.projects-layout nav select { margin: 8px 0 16px; padding: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--radius-sm); font: inherit; }
+.project-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.project-tabs button[aria-pressed="true"] { border-color: var(--accent); background: var(--subtle); }
+[hidden] { display: none !important; }
+.resize-none { resize: none; }

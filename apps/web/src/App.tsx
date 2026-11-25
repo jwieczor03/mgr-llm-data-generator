@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './monitor.css';
+import { Projects } from './Projects';
 
 type Status = 'checking' | 'connected' | 'failed';
 const TIMEOUT_MS = 5000;
 
 export function App() {
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const [status, setStatus] = useState<Status>('checking');
   const [dark, setDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
   const active = useRef<AbortController | null>(null);
@@ -53,10 +55,11 @@ export function App() {
     connected: 'Połączenie z API działa',
     failed: 'Nie udało się potwierdzić połączenia z API',
   };
-  return <main><header><div><h1>Generator danych</h1><p>Szkielet aplikacji</p></div><div className="actions"><button onClick={() => setDark(!dark)}>{dark ? 'Włącz jasny motyw' : 'Włącz ciemny motyw'}</button></div></header>
+  return <main><header><div><h1>Generator danych</h1><p>Szkielet aplikacji</p></div><div className="actions"><button onClick={() => setProjectsOpen(true)}>Projekty</button><button onClick={() => setDark(!dark)}>{dark ? 'Włącz jasny motyw' : 'Włącz ciemny motyw'}</button></div></header>
     <section><h2>Połączenie z API</h2><p role="status" className={status === 'connected' ? 'capable badge' : status === 'failed' ? 'notice' : ''}>{labels[status]}</p>
       <p>Połączenie potwierdza działanie procesu API. Gotowość konfiguracji, bazy i pozostałych usług sprawdzisz w osobnym panelu diagnostycznym. Generowanie danych nie jest jeszcze dostępne.</p>
       <button className="primary" disabled={status === 'checking'} onClick={() => void check()}>Sprawdź połączenie</button>
     </section>
+    <Projects open={projectsOpen} onClose={() => setProjectsOpen(false)} />
   </main>;
 }
