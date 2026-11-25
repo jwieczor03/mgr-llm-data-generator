@@ -24,7 +24,7 @@ function Diagnostics({ items,files=[] }: { items: Diagnostic[]|null|undefined; f
 }
 export function Projects({ open,onClose }: { open: boolean; onClose: () => void }) {
   const dialog=useRef<HTMLDialogElement>(null),confirm=useRef<HTMLDialogElement>(null),searchRef=useRef<HTMLInputElement>(null);
-  const transfer=useRef<Transfer|null>(null),page=useRef(crypto.randomUUID()),channel=useRef<BroadcastChannel|null>(null),selection=useRef(''),generation=useRef(0),receipt=useRef<Promise<void>|null>(null),lastRead404=useRef(false), currentVersion=useRef<string|undefined>(undefined), detailsGeneration=useRef(0), remotePending=useRef(false), remoteTimer=useRef<number | null>(null), slotWasBusy=useRef(false), viewRequests=useRef(new Set<AbortController>()), viewController=useRef(new AbortController()), versionsRequest=useRef<{project: string; generation: number; promise: Promise<void>} | null>(null), versionsRefresh=useRef<Promise<void> | null>(null), pollRunning=useRef(false), discoveryTimer=useRef<number | null>(null), cancelTarget=useRef<{project: string; attempt: string} | null>(null);
+  const transfer=useRef<Transfer|null>(null),page=useRef(crypto.randomUUID()),channel=useRef<BroadcastChannel|null>(null),selection=useRef(''),generation=useRef(0),receipt=useRef<Promise<void>|null>(null),lastRead404=useRef(false), currentVersion=useRef<string|undefined>(undefined), detailsGeneration=useRef(0), remotePending=useRef(false), remoteTimer=useRef<number | null>(null), slotWasBusy=useRef(false), viewRequests=useRef(new Set<AbortController>()), viewController=useRef(new AbortController()), versionsRequest=useRef<{project: string; generation: number; promise: Promise<void>} | null>(null), versionsRefresh=useRef<{project: string; generation: number; requested: number; promise: Promise<void>} | null>(null), slotSerial=useRef(0), currentAttempt=useRef<string | null>(null), pollRunning=useRef(false), discoveryTimer=useRef<number | null>(null), cancelTarget=useRef<{project: string; attempt: string} | null>(null);
   const [projects,setProjects]=useState<Project[]>([]),[project,setProject]=useState<Project|null>(null),[creating,setCreating]=useState(false);
   const [name,setName]=useState(''),[description,setDescription]=useState(''),[fields,setFields]=useState<Record<string,string>>({}),[error,setError]=useState('');
   const [files,setFiles]=useState<File[]>([]),[attempt,setAttempt]=useState<Attempt|null>(null),[unknown,setUnknown]=useState(false),[busy,setBusy]=useState(true),[localBusy,setLocalBusy]=useState(false);
@@ -33,16 +33,17 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
   const clearView = () => { viewController.current.abort(); viewController.current = new AbortController(); viewRequests.current.forEach(c => c.abort()); viewRequests.current.clear(); if (discoveryTimer.current !== null) window.clearTimeout(discoveryTimer.current); discoveryTimer.current = null; };
   const viewSignal = () => viewController.current.signal;
   const closeConfirm = () => { cancelTarget.current = null; if (confirm.current?.open) confirm.current.close(); };
-  const choose=(p: Project|null) => { closeConfirm(); clearView(); if(selection.current!==(p?.id??'')) { setFiles([]); setQuery(''); setTable(null); setVersions([]); setAnalysis(null); setRelations([]); setReadiness(null); currentVersion.current = undefined; versionsRefresh.current = null; } generation.current++; selection.current=p?.id??''; setProject(p); };
+  const choose=(p: Project|null) => { slotSerial.current++; closeConfirm(); clearView(); setDiscovery(''); if(selection.current!==(p?.id??'')) { setFiles([]); setQuery(''); setTable(null); setVersions([]); setAnalysis(null); setRelations([]); setReadiness(null); currentVersion.current = undefined; versionsRefresh.current = null; } generation.current++; selection.current=p?.id??''; setProject(p); };
   const broadcast=(kind: 'start' | 'refresh' = 'refresh') => channel.current?.postMessage(kind);
   const refreshProjects=useCallback(async () => { try { setProjects((await api<{ items: Project[] }>('/projects')).items); } catch(e) { setError(message(e)); } },[]);
   useEffect(() => { if(open) { dialog.current?.showModal(); void refreshProjects(); } else if(dialog.current?.open) dialog.current.close(); },[open,refreshProjects]);
   const refreshSlot = useCallback(async (id: string) => {
     const revision = generation.current;
+    const serial = ++slotSerial.current;
     const signal = viewSignal();
     try {
       const result = await api<{ busy: boolean; attempt_id: string | null; status: string | null }>(`${projectPath(id)}/ddl-processing`, { signal });
-      if (selection.current !== id || generation.current !== revision) return;
+      if (signal.aborted || selection.current !== id || generation.current !== revision || slotSerial.current !== serial) return;
       const wasBusy = slotWasBusy.current;
       slotWasBusy.current = result.busy || remotePending.current;
       setBusy(slotWasBusy.current);
@@ -53,7 +54,7 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
         });
       }
     } catch (e) {
-      if (!signal.aborted && selection.current === id && generation.current === revision) {
+      if (!signal.aborted && selection.current === id && generation.current === revision && slotSerial.current === serial) {
         setBusy(true); setUnknown(true); setError(message(e));
       }
     }
@@ -106,16 +107,25 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
     return promise;
   }
   function refreshVersions(p: string) {
-    if (versionsRefresh.current) return versionsRefresh.current;
     const revision = generation.current;
-    const pending = versionsRequest.current?.project === p && versionsRequest.current.generation === revision
-      ? versionsRequest.current.promise : null;
-    const promise = (async () => {
+    const existing = versionsRefresh.current;
+    if (existing && existing.project === p && existing.generation === revision) {
+      existing.requested++;
+      return existing.promise;
+    }
+    const state = { project: p, generation: revision, requested: 1, promise: Promise.resolve() };
+    state.promise = (async () => {
+      const pending = versionsRequest.current?.project === p && versionsRequest.current.generation === revision
+        ? versionsRequest.current.promise : null;
       if (pending) await pending;
-      if (selection.current === p && generation.current === revision) await loadVersions(p);
-    })().finally(() => { if (versionsRefresh.current === promise) versionsRefresh.current = null; });
-    versionsRefresh.current = promise;
-    return promise;
+      while (selection.current === p && generation.current === revision) {
+        const seen = state.requested;
+        await loadVersions(p);
+        if (seen === state.requested) break;
+      }
+    })().finally(() => { if (versionsRefresh.current === state) versionsRefresh.current = null; });
+    versionsRefresh.current = state;
+    return state.promise;
   }
   useEffect(() => {
     if(!project) return;
@@ -135,7 +145,7 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
       channel.current = new BroadcastChannel('ddl-processing');
       channel.current.onmessage = event => {
         if (event.data === 'start') {
-          remotePending.current = true; slotWasBusy.current = true; setBusy(true);
+          slotSerial.current++; remotePending.current = true; slotWasBusy.current = true; setBusy(true);
           if (remoteTimer.current !== null) window.clearTimeout(remoteTimer.current);
           remoteTimer.current = window.setTimeout(refresh, 3000);
         } else if (event.data === 'refresh') refresh();
@@ -185,6 +195,7 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
     return () => { window.clearInterval(timer); window.removeEventListener('beforeunload', before); window.removeEventListener('pagehide', hide); };
   }, []);
   useEffect(() => { if (cancelTarget.current && (!project || cancelTarget.current.project !== project.id || cancelTarget.current.attempt !== attempt?.attempt_id || !['ANALYSIS_PENDING','ANALYZING','RETRY_WAIT'].includes(attempt.status))) closeConfirm(); }, [project?.id, attempt?.attempt_id, attempt?.status]);
+  currentAttempt.current = attempt?.attempt_id ?? null;
   const version=versions.find(v => v.status==='SUCCEEDED');
   const versionId=version?.id;
   currentVersion.current = versionId;
@@ -193,12 +204,12 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
     signal ??= viewSignal();
     try { const [a,r,ready]=await Promise.all([api<Analysis>(`${versionPath(p,v)}/analysis`,{ signal }),api<{ items: Relation[] }>(`${versionPath(p,v)}/relations`,{ signal }),api<Readiness>(`${versionPath(p,v)}/readiness`,{ signal })]); if(selection.current===p&&generation.current===revision&&currentVersion.current===v&&detailsGeneration.current===request&&!signal?.aborted) { setAnalysis(a); setRelations(r.items); setReadiness(ready); } } catch(e) { if(!signal?.aborted&&selection.current===p&&generation.current===revision&&currentVersion.current===v&&detailsGeneration.current===request) setError(message(e)); }
   },[]);
-  useEffect(() => { if(!project||!versionId) return; clearView(); const controller=new AbortController(); viewRequests.current.add(controller); setAnalysis(null); setRelations([]); setReadiness(null); void loadDetails(project.id,versionId,controller.signal); return () => { controller.abort(); clearView(); }; },[project?.id,versionId,loadDetails]);
+  useEffect(() => { setDiscovery(''); if(!project||!versionId) return; clearView(); const controller=new AbortController(); viewRequests.current.add(controller); setAnalysis(null); setRelations([]); setReadiness(null); void loadDetails(project.id,versionId,controller.signal); return () => { controller.abort(); clearView(); }; },[project?.id,versionId,loadDetails]);
   async function create(e: React.FormEvent) { e.preventDefault(); setError(''); setFields({}); try { const p=await api<Project>('/projects',json('POST',{ name,description })); setProjects(old => [p,...old]); choose(p); setCreating(false); setName(''); setDescription(''); } catch(e) { setError(message(e)); if(e instanceof ApiError) setFields(Object.fromEntries((e.details?.fields??[]).map(f => [f.field,f.message]))); } }
   async function upload() {
     if(!project||!files.length) return;
     const revision=generation.current,p=project.id,id=crypto.randomUUID(),metadata=files.map(f => ({ name: f.name,size_bytes: f.size })),body={ page_id: page.current,files: metadata };
-    transfer.current={ project: p,id,page: page.current,acknowledged: false,localAbandon: false,uncertain: false,commandPending: true }; setLocalBusy(true); setAttempt({ attempt_id: id,status: 'RESERVED',schema_version_id: null }); setBusy(true); setUnknown(false); setError(''); broadcast('start');
+    transfer.current={ project: p,id,page: page.current,acknowledged: false,localAbandon: false,uncertain: false,commandPending: true }; slotSerial.current++; setLocalBusy(true); setAttempt({ attempt_id: id,status: 'RESERVED',schema_version_id: null }); setBusy(true); setUnknown(false); setError(''); broadcast('start');
     let reserved=false;
     try { await api(`${projectPath(p)}/ddl-attempts/${id}`,json('PUT',body)); reserved=true; }
     catch(e) {
@@ -402,7 +413,7 @@ export function Projects({ open,onClose }: { open: boolean; onClose: () => void 
       <p>Pliki tej wersji i częściowy wynik analizy zostaną usunięte.</p>
       <div className="actions">
         <button autoFocus onClick={closeConfirm}>Kontynuuj analizę</button>
-        <button onClick={() => { const target = cancelTarget.current; closeConfirm(); if (target && project?.id === target.project && attempt?.attempt_id === target.attempt && ['ANALYSIS_PENDING','ANALYZING','RETRY_WAIT'].includes(attempt.status)) void api(`${projectPath(target.project)}/ddl-attempts/${target.attempt}/cancel`,json('POST',{ page_id: page.current })).then(() => readAttempt(target.project,target.attempt)).catch(e => { if (selection.current === target.project) setError(message(e)); }); }}>Przerwij analizę</button>
+        <button onClick={() => { const target = cancelTarget.current; const revision = generation.current; closeConfirm(); const stillCurrent = () => target && selection.current === target.project && generation.current === revision && currentAttempt.current === target.attempt; if (target && stillCurrent() && attempt && ['ANALYSIS_PENDING','ANALYZING','RETRY_WAIT'].includes(attempt.status)) void api(`${projectPath(target.project)}/ddl-attempts/${target.attempt}/cancel`,json('POST',{ page_id: page.current })).then(() => { if (stillCurrent()) void readAttempt(target.project,target.attempt); }).catch(e => { if (stillCurrent()) setError(message(e)); }); }}>Przerwij analizę</button>
       </div>
     </dialog>
   </dialog>;

@@ -163,3 +163,61 @@ test('zmiana projektu przerywa odczyt wersji poprzedniego widoku', async () => {
   fireEvent.change(select, { target: { value: 'b' } });
   expect(oldSignal?.aborted).toBe(true);
 });
+
+test('nowe zakończenie podczas odczytu wersji zleca kolejny świeży odczyt', async () => {
+  let channel!: { onmessage: ((event: {data: string}) => void) | null };
+  class Channel { onmessage: ((event: {data: string}) => void) | null = null; constructor() { channel = this; } postMessage() {} close() {} }
+  vi.stubGlobal('BroadcastChannel', Channel);
+  let versionsReads = 0;
+  let finishOld!: (value: ReturnType<typeof response>) => void;
+  const fetchMock = vi.fn((url: string) => {
+    if (url.endsWith('/projects')) return Promise.resolve(response({ items: projects }));
+    if (url.endsWith('/ddl-processing')) return Promise.resolve(response({ busy: false, attempt_id: null, status: null }));
+    if (url.endsWith('/schema-versions')) {
+      versionsReads++;
+      if (versionsReads === 2) return new Promise<ReturnType<typeof response>>(resolve => { finishOld = resolve; });
+      return Promise.resolve(response({ items: versionsReads >= 3 ? [{ id: 'v2', status: 'SUCCEEDED', revision_no: 2, files: [{ id: 'f', name: 'najnowszy.sql', position: 0 }], diagnostics: [] }] : [] }));
+    }
+    if (url.endsWith('/analysis')) return Promise.resolve(response({ tables: [], columns: [], constraints: [], diagnostics: [] }));
+    if (url.endsWith('/relations')) return Promise.resolve(response({ items: [] }));
+    if (url.endsWith('/readiness')) return Promise.resolve(response({ ready: true, blockers: [] }));
+    throw new Error(url);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<Projects open onClose={() => {}} />);
+  await screen.findByRole('option', { name: 'Bank' });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Zapisane projekty' }), { target: { value: 'a' } });
+  await waitFor(() => expect((screen.getByLabelText('Pliki SQL') as HTMLInputElement).disabled).toBe(false));
+  act(() => { channel.onmessage?.({ data: 'start' }); channel.onmessage?.({ data: 'refresh' }); });
+  await waitFor(() => expect(versionsReads).toBe(2));
+  act(() => { channel.onmessage?.({ data: 'start' }); channel.onmessage?.({ data: 'refresh' }); });
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  await act(async () => { finishOld(response({ items: [] })); });
+  expect(await screen.findByText('najnowszy.sql')).toBeTruthy();
+  expect(versionsReads).toBe(3);
+});
+
+test.each(['sukces', 'błąd'])('starszy %s slotu nie nadpisuje nowszej blokady', async (outcome) => {
+  let oldResolve!: (value: ReturnType<typeof response>) => void;
+  let oldReject!: (reason: Error) => void;
+  let slotCalls = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('/projects')) return Promise.resolve(response({ items: projects }));
+    if (url.endsWith('/schema-versions')) return Promise.resolve(response({ items: [] }));
+    if (url.endsWith('/ddl-processing')) {
+      slotCalls++;
+      if (slotCalls === 1) return new Promise<ReturnType<typeof response>>((resolve, reject) => { oldResolve = resolve; oldReject = reject; });
+      return Promise.resolve(response({ busy: true, attempt_id: null, status: null }));
+    }
+    throw new Error(url);
+  }));
+  render(<Projects open onClose={() => {}} />);
+  await screen.findByRole('option', { name: 'Bank' });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Zapisane projekty' }), { target: { value: 'a' } });
+  await waitFor(() => expect(slotCalls).toBe(1));
+  fireEvent.focus(window);
+  await waitFor(() => expect(slotCalls).toBe(2));
+  await act(async () => { if (outcome === 'sukces') oldResolve(response({ busy: false, attempt_id: null, status: null })); else oldReject(new Error('stary błąd')); });
+  expect((screen.getByLabelText('Pliki SQL') as HTMLInputElement).disabled).toBe(true);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
